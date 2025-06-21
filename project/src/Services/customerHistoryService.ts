@@ -322,13 +322,37 @@ class CustomerHistoryService {
         return { success: false, message: error.message };
       }
 
-      // Ensure deleted_items is an array for each record
-      const customerHistories = (data || []).map(record => ({
-        ...record,
-        deleted_items: Array.isArray(record.deleted_items) ? record.deleted_items : []
-      })) as CustomerHistory[];
+      if (!data || data.length === 0) {
+        return { success: true, data: [], message: 'No matching records found' };
+      }
 
-      return { success: true, data: customerHistories };
+      // Filter out history for customers that no longer exist in the main prescriptions table.
+      // This prevents "dead" records from showing up in search.
+      const customerIds = [...new Set(data.map(item => item.customer_id).filter(id => id))];
+      
+      if (customerIds.length === 0) {
+        return { success: true, data: [], message: 'No matching records found' };
+      }
+
+      const { data: existingCustomers, error: customerError } = await supabase
+        .from('prescriptions')
+        .select('id')
+        .in('id', customerIds);
+      
+      if (customerError) {
+        logError('Error checking for existing customers in prescriptions table:', customerError);
+        // Fail gracefully: return the unfiltered data so the feature doesn't break.
+        return { success: true, data, message: 'Search successful (with potential old records)' };
+      }
+
+      const existingCustomerIds = new Set(existingCustomers.map(c => c.id));
+      const filteredData = data.filter(historyItem => existingCustomerIds.has(historyItem.customer_id));
+
+      if (filteredData.length === 0) {
+        return { success: true, data: [], message: 'No matching records found for existing customers' };
+      }
+
+      return { success: true, data: filteredData, message: 'Search successful' };
     } catch (error) {
       logError('Unexpected error in searchCustomerHistory:', error);
       return { 
