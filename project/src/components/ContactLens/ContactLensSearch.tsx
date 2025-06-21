@@ -3,6 +3,7 @@ import { contactLensService } from '../../Services/contactLensService';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
+import { logError } from '../../utils/logger';
 
 interface SearchResult {
   id: string;
@@ -102,7 +103,7 @@ const ContactLensSearch: React.FC<ContactLensSearchProps> = ({ onSelectPatient }
         setError(result.message || 'Search failed');
       }
     } catch (error) {
-      console.error('Error performing search:', error);
+      logError('Error performing search:', error);
       setError('An unexpected error occurred');
     } finally {
       setIsSearching(false);
@@ -129,7 +130,7 @@ const ContactLensSearch: React.FC<ContactLensSearchProps> = ({ onSelectPatient }
           setError('Failed to fetch detailed patient data');
         }
       } catch (error) {
-        console.error('Error fetching detailed data:', error);
+        logError('Error fetching detailed data:', error);
         setError('Error retrieving patient details');
       }
     } else {

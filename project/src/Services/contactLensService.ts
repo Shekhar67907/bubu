@@ -1,6 +1,7 @@
 // src/Services/contactLensService.ts
 import { supabase } from './supabaseService';
 import type { DatabasePrescription } from './supabaseService';
+import { logInfo, logError, logDebug, logWarn, logDev } from '../utils/logger';
 
 // Generate a unique contact lens prescription number with prefix CL-YYYYMMDD-XXX
 export const generateContactLensPrescriptionNo = (): string => {
@@ -145,7 +146,7 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
 
         if (contactLensPrescription?.id) {
           // Found existing ContactLens prescription - reuse it
-          console.log('Found existing ContactLens prescription with ID:', contactLensPrescription.id);
+          logInfo('Found existing ContactLens prescription with ID:', contactLensPrescription.id);
           return {
             success: true,
             message: 'Main ContactLens prescription record found and reused.',
@@ -154,7 +155,7 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
         }
 
         if (clFindError) {
-          console.warn('Error checking for existing ContactLens prescription:', clFindError.message);
+          logWarn('Error checking for existing ContactLens prescription:', clFindError.message);
         }
 
         // Check if there's any prescription with this mobile number (regardless of source)
@@ -165,16 +166,16 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
           .maybeSingle();
 
         if (anyFindError) {
-          console.warn('Error checking for any existing prescription:', anyFindError.message);
+          logWarn('Error checking for any existing prescription:', anyFindError.message);
         }
 
         if (anyPrescription) {
-          console.log(`Found existing prescription with mobile ${mobileNumber} and source: ${anyPrescription.source}`);
+          logInfo(`Found existing prescription with mobile ${mobileNumber} and source: ${anyPrescription.source}`);
           // We'll continue to create a new ContactLens prescription with the same mobile number
           // The unique constraint on (mobile_no, source) will allow this
         }
       } catch (error) {
-        console.error('Error in prescription lookup:', error);
+        logError('Error in prescription lookup:', error);
         // Continue with creation if there was an error in lookup
       }
     }
@@ -213,7 +214,7 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
       .single();
 
     if (insertError) {
-      console.error('Error creating new main prescription:', insertError.message);
+      logError('Error creating new main prescription:', insertError.message);
       return {
         success: false,
         message: `Error creating main prescription: ${insertError.message}`
@@ -221,14 +222,14 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
     }
 
     if (!newPrescription || !newPrescription.id) {
-      console.error('Failed to create main prescription: No ID returned after insert.');
+      logError('Failed to create main prescription: No ID returned after insert.');
       return {
         success: false,
         message: 'Failed to create main prescription: No ID returned after insert.'
       };
     }
 
-    console.log('Created new main prescription with ID:', newPrescription.id);
+    logInfo('Created new main prescription with ID:', newPrescription.id);
     return {
       success: true,
       message: 'Main prescription created successfully',
@@ -237,7 +238,7 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error during main prescription creation';
-    console.error('Error in createMainPrescription catch block:', errorMessage);
+    logError('Error in createMainPrescription catch block:', errorMessage);
     return {
       success: false,
       message: `Error creating main prescription: ${errorMessage}`
@@ -250,13 +251,13 @@ const createMainPrescription = async (contactLensData: ContactLensData): Promise
 export const saveContactLensPrescription = async (data: ContactLensData): Promise<{ success: boolean; message: string; id?: string }> => {
   try {
     const { prescription } = data;
-    console.log('Saving contact lens prescription for prescription number:', prescription.prescription_id);
+    logInfo('Saving contact lens prescription for prescription number:', prescription.prescription_id);
     
     let prescriptionUuid: string;
     
     // Always use createMainPrescription which handles the find-or-create logic
     // This ensures we properly handle the source field and mobile number uniqueness
-    console.log('Creating/updating main prescription...');
+    logInfo('Creating/updating main prescription...');
     const createResult = await createMainPrescription(data);
     
     if (!createResult.success || !createResult.id) {
@@ -264,10 +265,10 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
     
     prescriptionUuid = createResult.id;
-    console.log('Main prescription processed with UUID:', prescriptionUuid);
+    logInfo('Main prescription processed with UUID:', prescriptionUuid);
     
     // Check if a contact lens prescription already exists for this prescription ID
-    console.log('Checking if contact lens prescription already exists...');
+    logInfo('Checking if contact lens prescription already exists...');
     const { data: existingContactLens, error: existingCheckError } = await supabase
       .from('contact_lens_prescriptions')
       .select('id')
@@ -275,22 +276,22 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       .maybeSingle();
       
     if (existingCheckError) {
-      console.error('Error checking existing contact lens prescription:', existingCheckError);
+      logError('Error checking existing contact lens prescription:', existingCheckError);
       return { success: false, message: `Error checking existing data: ${existingCheckError.message}` };
     }
     
     // If contact lens prescription already exists, update it instead of creating a new one
     if (existingContactLens) {
-      console.log('Contact lens prescription already exists with ID:', existingContactLens.id);
-      console.log('Updating existing contact lens prescription instead of creating new one...');
+      logInfo('Contact lens prescription already exists with ID:', existingContactLens.id);
+      logInfo('Updating existing contact lens prescription instead of creating new one...');
       return await updateContactLensPrescription(existingContactLens.id, data);
     }
     
     // If no existing contact lens prescription, create a new one
-    console.log('No existing contact lens prescription found. Creating new record...');
+    logInfo('No existing contact lens prescription found. Creating new record...');
     
     // Debug log for class value
-    console.log('Saving to contact_lens_prescriptions with class:', prescription.class);
+    logInfo('Saving to contact_lens_prescriptions with class:', prescription.class);
     const { data: contactLensPrescription, error: prescriptionError } = await supabase
       .from('contact_lens_prescriptions')
       .upsert({
@@ -316,7 +317,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       .single();
 
     if (prescriptionError) {
-      console.error('Error saving contact lens prescription:', prescriptionError);
+      logError('Error saving contact lens prescription:', prescriptionError);
       return { 
         success: false, 
         message: `Error saving contact lens prescription: ${prescriptionError.message}` 
@@ -324,7 +325,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
     
     if (!contactLensPrescription) {
-      console.error('Failed to create contact lens prescription: No data returned');
+      logError('Failed to create contact lens prescription: No data returned');
       return { 
         success: false, 
         message: 'Failed to create contact lens prescription: No data returned' 
@@ -332,10 +333,10 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
 
     const contactLensPrescriptionId = contactLensPrescription.id;
-    console.log('Contact lens prescription saved with ID:', contactLensPrescriptionId);
+    logInfo('Contact lens prescription saved with ID:', contactLensPrescriptionId);
 
     // 2. Insert or update eye data (for both left and right eyes) using UPSERT
-    console.log('Upserting contact lens eye data...');
+    logInfo('Upserting contact lens eye data...');
     
     // First, delete any existing eye data for this prescription to avoid duplicates
     const { error: deleteEyesError } = await supabase
@@ -344,7 +345,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       .eq('contact_lens_prescription_id', contactLensPrescriptionId);
       
     if (deleteEyesError) {
-      console.error('Error removing existing eye data:', deleteEyesError);
+      logError('Error removing existing eye data:', deleteEyesError);
       // We'll continue anyway and try to insert the new data
     }
     
@@ -365,19 +366,19 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
         });
 
       if (eyeError) {
-        console.error(`Error saving ${eye.eye_side} eye data:`, eyeError);
+        logError(`Error saving ${eye.eye_side} eye data:`, eyeError);
         throw new Error(`Error saving ${eye.eye_side} eye data: ${eyeError.message}`);
       }
       
-      console.log(`${eye.eye_side} eye data saved successfully`);
+      logInfo(`${eye.eye_side} eye data saved successfully`);
       return true;
     });
 
     try {
       await Promise.all(eyeInsertPromises);
-      console.log('All eye data saved successfully');
+      logInfo('All eye data saved successfully');
     } catch (eyeError) {
-      console.error('Error saving eye data:', eyeError);
+      logError('Error saving eye data:', eyeError);
       // Attempt to clean up the prescription entry
       await supabase
         .from('contact_lens_prescriptions')
@@ -391,7 +392,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
     
     // 3. Insert or update contact lens items using UPSERT
-    console.log('Upserting contact lens items...');
+    logInfo('Upserting contact lens items...');
     
     // First, delete any existing items for this prescription to avoid duplicates
     const { error: deleteItemsError } = await supabase
@@ -400,7 +401,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       .eq('contact_lens_prescription_id', contactLensPrescriptionId);
       
     if (deleteItemsError) {
-      console.error('Error removing existing items:', deleteItemsError);
+      logError('Error removing existing items:', deleteItemsError);
       // We'll continue anyway and try to insert the new data
     }
     
@@ -412,7 +413,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
 
       // Important: Field names coming from UI are in camelCase but need to be converted to snake_case
       // For example, from UI: discountPercent -> database: discount_percent
-      console.log('Saving item with discount fields:', {
+      logInfo('Saving item with discount fields:', {
         ui_fields: {
           discountPercent: item.discountPercent,
           discountAmount: item.discountAmount,
@@ -428,7 +429,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       // IMPORTANT: In the contact_lens_items table, discount_amount is a generated column
       // that's automatically calculated by the database based on rate, quantity, and discount_percent.
       // We must EXCLUDE discount_amount from the insert operation and only set discount_percent.
-      console.log(`Inserting contact lens item ${index + 1} with discount_percent:`, item.discountPercent || 0);
+      logInfo(`Inserting contact lens item ${index + 1} with discount_percent:`, item.discountPercent || 0);
       
       const insertData = {
         contact_lens_prescription_id: contactLensPrescriptionId,
@@ -452,26 +453,26 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
         item_index: index // Add an index for ordering
       };
       
-      console.log('Contact lens item insert data:', insertData);
+      logInfo('Contact lens item insert data:', insertData);
       
       const { error: itemError } = await supabase
         .from('contact_lens_items')
         .insert(insertData);
       
       if (itemError) {
-        console.error(`Error saving item ${index + 1}:`, itemError);
+        logError(`Error saving item ${index + 1}:`, itemError);
         throw new Error(`Error saving item ${index + 1}: ${itemError.message}`);
       }
       
-      console.log(`Item ${index + 1} saved successfully`);
+      logInfo(`Item ${index + 1} saved successfully`);
       return true;
     });
 
     try {
       await Promise.all(itemInsertPromises);
-      console.log('All items saved successfully');
+      logInfo('All items saved successfully');
     } catch (itemError) {
-      console.error('Error saving items:', itemError);
+      logError('Error saving items:', itemError);
       // Attempt to clean up the prescription entries and eye data
       await supabase
         .from('contact_lens_eyes')
@@ -490,7 +491,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
 
     // 4. Insert or update payment data using UPSERT pattern
-    console.log('Upserting payment data...');
+    logInfo('Upserting payment data...');
     
     // First, check if payment data already exists for this prescription
     const { data: existingPayment, error: paymentCheckError } = await supabase
@@ -500,7 +501,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       .maybeSingle();
       
     if (paymentCheckError) {
-      console.error('Error checking existing payment data:', paymentCheckError);
+      logError('Error checking existing payment data:', paymentCheckError);
       // We'll continue anyway and try to insert/update
     }
     
@@ -528,7 +529,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
     }
     
     // Log the UI values we're getting
-    console.log('SAVING - UI VALUES BEFORE PROCESSING:', {
+    logInfo('SAVING - UI VALUES BEFORE PROCESSING:', {
       ui_payment_total: data.payment.payment_total,
       ui_estimate: data.payment.estimate,
       ui_discount_amount: data.payment.discount_amount,
@@ -571,7 +572,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       payment_date: data.payment.payment_date || new Date().toISOString().split('T')[0]
     };
     
-    console.log('Saving corrected payment data to database:', correctedPaymentData);
+    logInfo('Saving corrected payment data to database:', correctedPaymentData);
     
     // Use upsert if payment exists, otherwise insert
     const { error: paymentError } = existingPayment
@@ -584,7 +585,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
           .insert(correctedPaymentData);
 
     if (paymentError) {
-      console.error('Error saving payment data:', paymentError);
+      logError('Error saving payment data:', paymentError);
       // Attempt to clean up all related data
       await supabase
         .from('contact_lens_items')
@@ -607,8 +608,8 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       };
     }
     
-    console.log('Payment data saved successfully');
-    console.log('All contact lens prescription data saved successfully!');
+    logInfo('Payment data saved successfully');
+    logInfo('All contact lens prescription data saved successfully!');
     
     return { 
       success: true, 
@@ -616,7 +617,7 @@ export const saveContactLensPrescription = async (data: ContactLensData): Promis
       id: contactLensPrescriptionId 
     };
   } catch (error) {
-    console.error('Unexpected error in saveContactLensPrescription:', error);
+    logError('Unexpected error in saveContactLensPrescription:', error);
     return { 
       success: false, 
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -638,7 +639,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
       .single();
 
     if (prescriptionError) {
-      console.error('Error fetching contact lens prescription:', prescriptionError);
+      logError('Error fetching contact lens prescription:', prescriptionError);
       return { success: false, message: prescriptionError.message, data: null };
     }
 
@@ -649,7 +650,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
       .eq('contact_lens_prescription_id', prescriptionId);
 
     if (eyesError) {
-      console.error('Error fetching contact lens eye data:', eyesError);
+      logError('Error fetching contact lens eye data:', eyesError);
       return { success: false, message: eyesError.message, data: null };
     }
 
@@ -660,7 +661,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
       .eq('contact_lens_prescription_id', prescriptionId);
 
     if (itemsError) {
-      console.error('Error fetching contact lens items:', itemsError);
+      logError('Error fetching contact lens items:', itemsError);
       return { success: false, message: itemsError.message, data: null };
     }
 
@@ -672,7 +673,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
       .single();
 
     if (paymentError) {
-      console.error('Error fetching contact lens payment:', paymentError);
+      logError('Error fetching contact lens payment:', paymentError);
       return { success: false, message: paymentError.message, data: null };
     }
 
@@ -684,7 +685,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
       .single();
 
     if (customerError && customerError.code !== 'PGRST116') { // PGRST116 is not found, which is ok here
-      console.error('Error fetching customer data:', customerError);
+      logError('Error fetching customer data:', customerError);
       // Don't return here, as we might still be able to provide the contact lens data
     }
 
@@ -722,7 +723,7 @@ export const getContactLensPrescription = async (prescriptionId: string) => {
     };
 
   } catch (error) {
-    console.error('Unexpected error fetching contact lens prescription:', error);
+    logError('Unexpected error fetching contact lens prescription:', error);
     return {
       success: false,
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -748,7 +749,7 @@ export const getContactLensPrescriptionsByPrescriptionId = async (prescriptionId
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching contact lens prescriptions:', error);
+      logError('Error fetching contact lens prescriptions:', error);
       return { success: false, message: error.message, data: null };
     }
 
@@ -758,7 +759,7 @@ export const getContactLensPrescriptionsByPrescriptionId = async (prescriptionId
       data
     };
   } catch (error) {
-    console.error('Unexpected error fetching contact lens prescriptions:', error);
+    logError('Unexpected error fetching contact lens prescriptions:', error);
     return {
       success: false,
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -772,7 +773,7 @@ export const getContactLensPrescriptionsByPrescriptionId = async (prescriptionId
  */
 export const updateContactLensPrescription = async (prescriptionId: string, data: ContactLensData) => {
   try {
-    console.log('Updating contact lens prescription:', prescriptionId);
+    logInfo('Updating contact lens prescription:', prescriptionId);
     
     // First, get the original record to ensure we have all required fields
     const { data: originalRecord, error: fetchError } = await supabase
@@ -782,7 +783,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       .single();
     
     if (fetchError) {
-      console.error('Error fetching original record:', fetchError);
+      logError('Error fetching original record:', fetchError);
       return { success: false, message: `Error fetching original record: ${fetchError.message}` };
     }
     
@@ -791,7 +792,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
     }
     
     // Debug log for class value on update
-    console.log('Updating contact_lens_prescriptions with class:', data.prescription.class);
+    logInfo('Updating contact_lens_prescriptions with class:', data.prescription.class);
     const { error: prescriptionError } = await supabase
       .from('contact_lens_prescriptions')
       .upsert({
@@ -816,7 +817,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       });
 
     if (prescriptionError) {
-      console.error('Error updating contact lens prescription:', prescriptionError);
+      logError('Error updating contact lens prescription:', prescriptionError);
       return { success: false, message: `Error updating contact lens prescription: ${prescriptionError.message}` };
     }
 
@@ -827,7 +828,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       .eq('contact_lens_prescription_id', prescriptionId);
 
     if (deleteEyesError) {
-      console.error('Error deleting existing eye data:', deleteEyesError);
+      logError('Error deleting existing eye data:', deleteEyesError);
       return { success: false, message: `Error updating eye data: ${deleteEyesError.message}` };
     }
 
@@ -856,7 +857,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
     try {
       await Promise.all(eyeInsertPromises);
     } catch (eyeError) {
-      console.error('Error updating eye data:', eyeError);
+      logError('Error updating eye data:', eyeError);
       return { success: false, message: eyeError instanceof Error ? eyeError.message : 'Error updating eye data' };
     }
 
@@ -867,7 +868,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       .eq('contact_lens_prescription_id', prescriptionId);
 
     if (deleteItemsError) {
-      console.error('Error deleting existing items:', deleteItemsError);
+      logError('Error deleting existing items:', deleteItemsError);
       return { success: false, message: `Error updating items: ${deleteItemsError.message}` };
     }
 
@@ -901,7 +902,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
     try {
       await Promise.all(itemInsertPromises);
     } catch (itemError) {
-      console.error('Error updating items:', itemError);
+      logError('Error updating items:', itemError);
       return { success: false, message: itemError instanceof Error ? itemError.message : 'Error updating items' };
     }
 
@@ -914,7 +915,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       .single();
       
     if (fetchPaymentError) {
-      console.error('Error fetching payment record:', fetchPaymentError);
+      logError('Error fetching payment record:', fetchPaymentError);
       return { success: false, message: `Error fetching payment record: ${fetchPaymentError.message}` };
     }
     
@@ -948,7 +949,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
       });
 
     if (paymentError) {
-      console.error('Error updating payment data:', paymentError);
+      logError('Error updating payment data:', paymentError);
       return { success: false, message: `Error updating payment data: ${paymentError.message}` };
     }
 
@@ -959,7 +960,7 @@ export const updateContactLensPrescription = async (prescriptionId: string, data
     };
 
   } catch (error) {
-    console.error('Unexpected error updating contact lens prescription:', error);
+    logError('Unexpected error updating contact lens prescription:', error);
     return {
       success: false,
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -981,7 +982,7 @@ export const deleteContactLensPrescription = async (prescriptionId: string) => {
       .eq('id', prescriptionId);
 
     if (error) {
-      console.error('Error deleting contact lens prescription:', error);
+      logError('Error deleting contact lens prescription:', error);
       return { success: false, message: `Error deleting contact lens prescription: ${error.message}` };
     }
 
@@ -990,7 +991,7 @@ export const deleteContactLensPrescription = async (prescriptionId: string) => {
       message: 'Contact lens prescription deleted successfully'
     };
   } catch (error) {
-    console.error('Unexpected error deleting contact lens prescription:', error);
+    logError('Unexpected error deleting contact lens prescription:', error);
     return {
       success: false,
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -1010,7 +1011,7 @@ export const searchContactLensPatients = async (searchField: string, searchValue
       return { success: false, message: 'Search value cannot be empty', data: [] };
     }
 
-    console.log(`Searching for ${searchField} with value: ${searchValue}`);
+    logInfo(`Searching for ${searchField} with value: ${searchValue}`);
     
     // Different search logic based on the field
     switch (searchField) {
@@ -1039,13 +1040,13 @@ export const searchContactLensPatients = async (searchField: string, searchValue
           .ilike('prescription_no', `%${searchValue}%`);
 
         if (prescriptionError) {
-          console.error('Error searching prescriptions:', prescriptionError);
+          logError('Error searching prescriptions:', prescriptionError);
           return { success: false, message: `Error searching: ${prescriptionError.message}`, data: [] };
         }
 
         // For each found prescription, get any contact lens data
         const prescriptionResults = await Promise.all(prescriptionData.map(async (prescription) => {
-          console.log('%c🔴 SERVICE DEBUG | prescription.id:', 'color: red; font-weight: bold;', prescription.id);
+          logDebug('SERVICE DEBUG | prescription.id', { id: prescription.id, style: 'color: red; font-weight: bold;' });
           const { data: contactLensData } = await supabase
             .from('contact_lens_prescriptions')
             .select(`
@@ -1063,15 +1064,15 @@ export const searchContactLensPatients = async (searchField: string, searchValue
             `)
             .eq('prescription_id', prescription.id)
             .maybeSingle();
-          console.log('%c🔴 SERVICE DEBUG | contactLensData.prescription_id:', 'color: red; font-weight: bold;', contactLensData?.prescription_id);
-          console.log('🔍 SERVICE DEBUG | contactLensData:', contactLensData);
+          logDebug('SERVICE DEBUG | contactLensData.prescription_id', { prescription_id: contactLensData?.prescription_id, style: 'color: red; font-weight: bold;' });
+          logInfo('🔍 SERVICE DEBUG | contactLensData:', contactLensData);
           const merged = {
             ...prescription,
             contactLensData: contactLensData || null,
             birth_day: contactLensData?.birth_day || prescription.birth_day || null,
             marriage_anniversary: contactLensData?.marriage_anniversary || prescription.marriage_anniversary || null
           };
-          console.log('🔍 SERVICE DEBUG | merged:', merged);
+          logInfo('🔍 SERVICE DEBUG | merged:', merged);
           return merged;
         }));
 
@@ -1106,7 +1107,7 @@ export const searchContactLensPatients = async (searchField: string, searchValue
           .ilike('mobile_no', `%${searchValue}%`);
 
         if (mobileError) {
-          console.error('Error searching by mobile:', mobileError);
+          logError('Error searching by mobile:', mobileError);
           return { success: false, message: `Error searching: ${mobileError.message}`, data: [] };
         }
 
@@ -1170,7 +1171,7 @@ export const searchContactLensPatients = async (searchField: string, searchValue
           .ilike('name', `%${searchValue}%`);
 
         if (nameError) {
-          console.error('Error searching by name:', nameError);
+          logError('Error searching by name:', nameError);
           return { success: false, message: `Error searching: ${nameError.message}`, data: [] };
         }
 
@@ -1236,7 +1237,7 @@ export const searchContactLensPatients = async (searchField: string, searchValue
           .ilike('ref_no', `%${searchValue}%`);
 
         if (refError) {
-          console.error('Error searching by reference number:', refError);
+          logError('Error searching by reference number:', refError);
           return { success: false, message: `Error searching: ${refError.message}`, data: [] };
         }
 
@@ -1279,7 +1280,7 @@ export const searchContactLensPatients = async (searchField: string, searchValue
         return { success: false, message: 'Invalid search field', data: [] };
     }
   } catch (error) {
-    console.error('Unexpected error during search:', error);
+    logError('Unexpected error during search:', error);
     return {
       success: false,
       message: `Search error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -1303,13 +1304,13 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       .single();
     
     // Add red debug logs for key fields
-    console.log('%c🔴 DETAILED DEBUG | contact_lens_prescriptions.id:', 'color: red; font-weight: bold;', prescription?.id);
-    console.log('%c🔴 DETAILED DEBUG | contact_lens_prescriptions.prescription_id:', 'color: red; font-weight: bold;', prescription?.prescription_id);
-    console.log('%c🔴 DETAILED DEBUG | contact_lens_prescriptions.birth_day:', 'color: red; font-weight: bold;', prescription?.birth_day);
-    console.log('%c🔴 DETAILED DEBUG | contact_lens_prescriptions.marriage_anniversary:', 'color: red; font-weight: bold;', prescription?.marriage_anniversary);
+    logDebug('DETAILED DEBUG | contact_lens_prescriptions.id', { id: prescription?.id, style: 'color: red; font-weight: bold;' });
+    logDebug('DETAILED DEBUG | contact_lens_prescriptions.prescription_id', { prescription_id: prescription?.prescription_id, style: 'color: red; font-weight: bold;' });
+    logDebug('DETAILED DEBUG | contact_lens_prescriptions.birth_day', { birth_day: prescription?.birth_day, style: 'color: red; font-weight: bold;' });
+    logDebug('DETAILED DEBUG | contact_lens_prescriptions.marriage_anniversary', { marriage_anniversary: prescription?.marriage_anniversary, style: 'color: red; font-weight: bold;' });
     
     if (prescriptionError) {
-      console.error('Error fetching prescription details:', prescriptionError);
+      logError('Error fetching prescription details:', prescriptionError);
       return { success: false, message: `Error fetching details: ${prescriptionError.message}` };
     }
     
@@ -1322,7 +1323,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
     const mainPrescription = mainPrescriptionData as DatabasePrescription | null;
     
     if (mainError) {
-      console.error('Error fetching main prescription:', mainError);
+      logError('Error fetching main prescription:', mainError);
       return { success: false, message: `Error fetching customer info: ${mainError.message}` };
     }
     
@@ -1333,7 +1334,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       .eq('contact_lens_prescription_id', contactLensPrescriptionId);
     
     if (eyesError) {
-      console.error('Error fetching eye data:', eyesError);
+      logError('Error fetching eye data:', eyesError);
       return { success: false, message: `Error fetching eye data: ${eyesError.message}` };
     }
     
@@ -1345,7 +1346,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       .order('item_index', { ascending: true });
     
     if (itemsError) {
-      console.error('Error fetching items:', itemsError);
+      logError('Error fetching items:', itemsError);
       return { success: false, message: `Error fetching items: ${itemsError.message}` };
     }
     
@@ -1357,12 +1358,12 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       .single();
     
     if (paymentError) {
-      console.error('Error fetching payment data:', paymentError);
+      logError('Error fetching payment data:', paymentError);
       return { success: false, message: `Error fetching payment data: ${paymentError.message}` };
     }
     
     // Log what we're loading from the database
-    console.log('DATABASE VALUES BEING LOADED:', {
+    logInfo('DATABASE VALUES BEING LOADED:', {
       items: items,
       payment: payment
     });
@@ -1396,7 +1397,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       }
       
       // Enhanced logging of what we're loading
-      console.log(`Item ${index + 1} values from database:`, {
+      logInfo(`Item ${index + 1} values from database:`, {
         qty,
         rate,
         expectedBaseTotal,
@@ -1406,7 +1407,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
       });
       
       // Debug log the raw eye_side value from database
-      console.log('Raw eye_side from DB:', item.eye_side);
+      logInfo('Raw eye_side from DB:', item.eye_side);
       
       // Map eye_side database values to UI values, handling case insensitivity
       const normalizedEyeSide = String(item.eye_side).toLowerCase().trim();
@@ -1480,7 +1481,7 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
     };
     
   } catch (error) {
-    console.error('Unexpected error retrieving detailed data:', error);
+    logError('Unexpected error retrieving detailed data:', error);
     return {
       success: false,
       message: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`

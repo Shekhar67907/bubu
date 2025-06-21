@@ -27,6 +27,7 @@ import {
 } from '../../utils/prescriptionUtils';
 import LensPrescriptionSection from './LensPrescriptionSection';
 import { useNavigate } from 'react-router-dom';
+import { logInfo, logError, logDebug, logDev, logWarn } from '../../utils/logger';
 
 interface PrescriptionFormProps {
   onSubmit: (data: PrescriptionData) => void;
@@ -92,7 +93,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
   // Update form data when initialData changes (when a search result is selected)
   useEffect(() => {
     if (initialData) {
-      console.log('Updating form with initialData:', initialData);
+      logInfo('Updating form with initialData', { prescriptionNo: initialData.prescriptionNo, initialData });
       setFormData(initialData);
     }
   }, [initialData]);
@@ -102,7 +103,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
     // If prescription number is empty, generate a new one
     if (!formData.prescriptionNo) {
       const newPrescriptionNo = generatePrescriptionNo();
-      console.log('Setting new prescription number:', newPrescriptionNo);
+      logInfo('Setting new prescription number', { newPrescriptionNo });
       setFormData(prev => ({
         ...prev,
         prescriptionNo: newPrescriptionNo,
@@ -157,10 +158,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
     const newErrors: Record<string, string> = {};
     const missingFields: string[] = [];
     
-    console.log('validateForm called with state:', { 
-      balanceLens: formData.balanceLens, 
-      leftEyeDv: formData.leftEye.dv 
-    });
+    logDebug('validateForm called', { balanceLens: formData.balanceLens, leftEyeDv: formData.leftEye.dv });
     
     if (!formData.prescribedBy) {
       newErrors.prescribedBy = 'Prescribed By is required';
@@ -181,11 +179,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
 
     // Validate left eye prescription, considering balance lens
     const leftEyeErrors = validatePrescriptionData(formData.leftEye.dv, formData.balanceLens);
-    console.log('Left eye validation:', { 
-      isBalanceLens: formData.balanceLens, 
-      leftEyeDv: formData.leftEye.dv, 
-      errors: leftEyeErrors 
-    });
+    logDebug('Left eye validation', { isBalanceLens: formData.balanceLens, leftEyeDv: formData.leftEye.dv, errors: leftEyeErrors });
     
     leftEyeErrors.forEach(error => {
       newErrors[`leftEye.dv.${error.field}`] = error.message;
@@ -193,7 +187,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
     });
     
     setErrors(newErrors);
-    console.log('PrescriptionForm: validateForm result', Object.keys(newErrors).length === 0, { newErrors });
+    logInfo('PrescriptionForm: validateForm result', { isValid: Object.keys(newErrors).length === 0, newErrors });
     
     // Show toast notification if there are any errors
     if (missingFields.length > 0) {
@@ -214,8 +208,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     if (!name) {
-      console.error('[handleChange] Missing name on event target:', e.target, e);
-      console.trace();
+      logError('[handleChange] Missing name on event target', undefined, { event: e });
       return;
     }
 
@@ -223,7 +216,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
     if (formData.balanceLens && name.startsWith('leftEye.dv.')) {
       const field = name.split('.').pop();
       if (field === 'sph' || field === 'cyl' || field === 'ax') {
-        console.log('Preventing change to left eye field when balance lens is active:', name);
+        logDebug('Preventing change to left eye field when balance lens is active', { name });
         return;
       }
     }
@@ -254,7 +247,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
 
   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, checked } = e.target;
-    console.log('handleCheckboxChange called with:', { name, checked });
+    logDebug('handleCheckboxChange called', { name, checked });
     
     if (name === 'balanceLens') {
       setFormData(prev => {
@@ -303,7 +296,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
     if (formData.balanceLens && name.startsWith('leftEye.dv.')) {
       const field = name.split('.').pop();
       if (field === 'sph' || field === 'cyl' || field === 'ax') {
-        console.log('Preventing numeric change to left eye field when balance lens is active:', name);
+        logDebug('Preventing numeric change to left eye field when balance lens is active', { name });
         return;
       }
     }
@@ -355,7 +348,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
       onSubmit(formData);
       return { success: true };
     } catch (error) {
-      console.error('Error in manualSave:', error);
+      logError('Error in manualSave', error, { prescriptionNo: formData.prescriptionNo });
       return { success: false };
     }
   };
@@ -370,11 +363,10 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
         // After saving successfully, show the print dialog
         setShowPrintDialog(true);
       } else {
-        alert('Failed to save prescription. Please try again.');
+        logWarn('Failed to save prescription. Please try again.', { prescriptionNo: formData.prescriptionNo });
       }
     } catch (error) {
-      console.error('Error saving prescription:', error);
-      alert('An error occurred while saving the prescription.');
+      logError('Error saving prescription', error, { prescriptionNo: formData.prescriptionNo });
     }
   };
   
@@ -432,10 +424,10 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
   const handlePrintOptionSelected = (option: 'normal' | 'card') => {
     // Handle the selected print option
     if (option === 'normal') {
-      console.log('Print Normal Size');
+      logInfo('Print Normal Size', { prescriptionNo: formData.prescriptionNo });
       // Implement normal size printing logic
     } else if (option === 'card') {
-      console.log('Print Card Size');
+      logInfo('Print Card Size', { prescriptionNo: formData.prescriptionNo });
       // Implement card size printing logic
     }
     
@@ -460,7 +452,7 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('PrescriptionForm: handleFormSubmit triggered');
+    logInfo('PrescriptionForm: handleFormSubmit triggered', { prescriptionNo: formData.prescriptionNo });
     
     // If balance lens is checked, copy right eye values to left eye before validation
     if (formData.balanceLens) {

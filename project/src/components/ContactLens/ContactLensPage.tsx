@@ -15,6 +15,7 @@ import { ContactLensFormData, ContactLensItem } from './ContactLensTypes';
 import ToastNotification from '../ui/ToastNotification';
 import ContactLensSearch from './ContactLensSearch';
 import { useNavigate } from 'react-router-dom';
+import { logInfo, logError, logDebug, logDev, logWarn } from '../../utils/logger';
 // No direct imports from src folder to avoid path issues
 
 
@@ -103,8 +104,7 @@ const initialContactLensForm: ContactLensFormData = {
 
 // Update the toDateInputValue function in ContactLensPage.tsx
 function toDateInputValue(dateStr: string | null | undefined): string {
-  // Debug log the input
-  console.log('toDateInputValue - Input:', { dateStr, type: typeof dateStr });
+  logDebug('toDateInputValue called', { dateStr, type: typeof dateStr });
   
   if (!dateStr || dateStr === 'null' || dateStr === 'undefined' || dateStr === 'Invalid Date') return '';
   
@@ -116,7 +116,7 @@ function toDateInputValue(dateStr: string | null | undefined): string {
   // Try to parse the date
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) {
-    console.warn('Invalid date string:', dateStr);
+    logWarn('Invalid date string in toDateInputValue', { dateStr });
     return '';
   }
   
@@ -132,8 +132,7 @@ function toDateInputValue(dateStr: string | null | undefined): string {
 function toDateTimeLocalValue(dateStr: string): string {
   if (!dateStr) return '';
   
-  // Add debug logging
-  console.log('toDateTimeLocalValue - Input:', dateStr);
+  logDebug('toDateTimeLocalValue called', { dateStr });
   
   // If it's already in the correct format, return as is
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(dateStr)) {
@@ -194,7 +193,7 @@ const ContactLensPage: React.FC = () => {
     
     // Debug log for date fields
     if (name === 'birthDay' || name === 'marriageAnniversary') {
-      console.log('🔍 DATE CHANGE - Field:', name, 'Value:', value, 'Type:', type);
+      logDebug('DATE CHANGE', { field: name, value, type });
     }
     
     // Early return if the target is undefined or the name is missing
@@ -202,7 +201,7 @@ const ContactLensPage: React.FC = () => {
     
     // Log issues but continue processing to avoid UI breaks
     if (!name) {
-      console.error('Event target name is undefined:', e);
+      logError('Event target name is undefined in handleChange', undefined, { event: e });
       return;
     }
     
@@ -232,7 +231,7 @@ const ContactLensPage: React.FC = () => {
           current[keys[keys.length - 1]] = value;
           return obj;
         } catch (error: any) {
-          console.error('Error updating nested state:', error);
+          logError('Error updating nested state in handleChange', error);
           return updatedState; // Return state with sourceType on error
         }
       }
@@ -270,7 +269,7 @@ const ContactLensPage: React.FC = () => {
     
     // Skip processing if name is undefined (though it should be present here)
     if (!name) {
-      console.error('Input name is undefined in handleNumericInputChange');
+      logError('Input name is undefined in handleNumericInputChange');
       return;
     }
     
@@ -317,7 +316,7 @@ const ContactLensPage: React.FC = () => {
   // Consolidated function to calculate and update payment totals
   const calculateTotal = (items: ContactLensItem[], isManualCalculation: boolean = true) => {
     // IMPORTANT DEBUG - Log current state to diagnose issues
-    console.log('calculateTotal called with:', {
+    logDebug('calculateTotal called', {
       isManualCalculation,
       currentPaymentValue: formData.payment,
       currentAdvanceValue: formData.advance,
@@ -334,8 +333,7 @@ const ContactLensPage: React.FC = () => {
     
     // Only block recalculation if we're loading from DB AND not forcing recalculation
     if (formData.sourceType === 'DATABASE_VALUES' && !forceRecalculation) {
-      console.log('🛑 BLOCKED AUTOMATIC RECALCULATION: Payment data came from DATABASE_VALUES');
-      console.log('Current preserved values:', {
+      logDebug('Blocked automatic recalculation: Payment data came from DATABASE_VALUES', {
         payment: formData.payment,
         advance: formData.advance,
         balance: formData.balance
@@ -345,7 +343,7 @@ const ContactLensPage: React.FC = () => {
     
     // If we have new items or manual calculation, we need to update payment
     if (forceRecalculation) {
-      console.log('⚠️ ALLOWING RECALCULATION: Manual update or new items added');
+      logDebug('Allowing recalculation: Manual update or new items added');
       // When adding new items with database values loaded, we switch to user input mode
       if (formData.sourceType === 'DATABASE_VALUES') {
         setFormData(prev => ({
@@ -357,14 +355,14 @@ const ContactLensPage: React.FC = () => {
     
     // If we're loading from DB, NEVER calculate regardless of other conditions
     if (isLoadingFromDB) {
-      console.log('BLOCKED: Currently loading from DB - all calculations blocked');
+      logDebug('Blocked: Currently loading from DB - all calculations blocked');
       return; // Block ALL calculations during DB load
     }
     
     // Skip calculations entirely if they are not manual and we already have data
     // IMPORTANT: This is the main guard that prevents recalculation on data load
     if (!isManualCalculation && formData.payment && parseFloat(formData.payment) > 0) {
-      console.log('SKIPPING calculation completely - using existing DB values:', {
+      logDebug('Skipping calculation completely - using existing DB values', {
         payment: formData.payment,
         advance: formData.advance,
         balance: formData.balance
@@ -372,7 +370,7 @@ const ContactLensPage: React.FC = () => {
       return; // Exit early - do not calculate or update state
     }
     
-    console.log(`Calculating totals - isManualCalculation: ${isManualCalculation}`);
+    logDebug('Calculating totals', { isManualCalculation });
     
     // Calculate base total (before discount)
     const baseTotal = items.reduce((sum, item) => {
@@ -410,7 +408,7 @@ const ContactLensPage: React.FC = () => {
     const balance = Math.max(0, finalTotal - totalAdvance);
     const formattedBalance = balance.toFixed(2);
     
-    console.log('Payment calculation results:', {
+    logDebug('Payment calculation results', {
       baseTotal,
       finalTotal,
       totalDiscount,
@@ -426,7 +424,7 @@ const ContactLensPage: React.FC = () => {
       if (!isManualCalculation) {
         const hasExistingValues = prev.payment && parseFloat(prev.payment) > 0;
         if (hasExistingValues) {
-          console.log('Preserving existing payment fields from database:', {
+          logDebug('Preserving existing payment fields from database', {
             payment: prev.payment,
             schAmt: prev.schAmt,
             estimate: prev.estimate,
@@ -437,7 +435,7 @@ const ContactLensPage: React.FC = () => {
         }
       }
       
-      console.log('Setting payment fields:', {
+      logDebug('Setting payment fields', {
         payment: formattedFinalTotal,     // This is after discount (e.g. 900)
         schAmt: formattedDiscount,        // Total discount amount (e.g. 100)
         estimate: formattedBaseTotal,     // Original total before discount (e.g. 1000)
@@ -457,9 +455,8 @@ const ContactLensPage: React.FC = () => {
   };
 
   const handleApplyDiscount = () => {
-    console.log('MANUAL DISCOUNT REQUESTED - User clicked Apply Discount button');
-    console.log('Applying discount with percentage:', discountPercentage, 
-              'sourceType:', formData.sourceType);
+    logInfo('Manual discount requested - user clicked Apply Discount button');
+    logDebug('Applying discount', { discountPercentage, sourceType: formData.sourceType });
     
     // Validate the discount percentage first
     const discount = parseFloat(discountPercentage);
@@ -481,7 +478,7 @@ const ContactLensPage: React.FC = () => {
       );
       
       if (!proceed) {
-        console.log('User canceled discount application to preserve DB values');
+        logInfo('User canceled discount application to preserve DB values');
         return;
       }
     }
@@ -505,7 +502,7 @@ const ContactLensPage: React.FC = () => {
       calculateTotal(formData.contactLensItems);
     }
 
-    console.log('Applying discount of', discount, '% to all items');
+    logDebug('Applying discount of', discount);
   
     const updatedItems = formData.contactLensItems.map(item => {
       // Calculate base amount without discount
@@ -515,7 +512,7 @@ const ContactLensPage: React.FC = () => {
       // Calculate final amount after discount
       const finalAmount = baseAmount - discountAmt;
       
-      console.log('Item discount calculation:', {
+      logDebug('Item discount calculation', {
         baseAmount,
         discount, 
         discountAmt,
@@ -536,7 +533,7 @@ const ContactLensPage: React.FC = () => {
     }));
   
     // Explicitly mark that this is a manual calculation, not from loading
-    console.log('MANUAL DISCOUNT - Recalculating totals after user applied discount');
+    logDebug('Manual discount - recalculating totals after user applied discount');
     calculateTotal(updatedItems, true); // true = manual calculation
 
     // Add success notification
@@ -547,8 +544,7 @@ const ContactLensPage: React.FC = () => {
   useEffect(() => {
     // CRITICAL: Check if we have database values that need to be preserved
     if (formData.sourceType === 'DATABASE_VALUES') {
-      console.log('PRESERVING DATABASE VALUES - SKIPPING AUTO RECALCULATION');
-      console.log('Current preserved values:', {
+      logDebug('Preserving database values - skipping auto recalculation', {
         payment: formData.payment,
         advance: formData.advance,
         balance: formData.balance
@@ -558,7 +554,7 @@ const ContactLensPage: React.FC = () => {
     
     // Only for user input or new items, recalculate
     if (formData.sourceType === 'USER_INPUT' || formData.contactLensItems.length > 0) {
-      console.log('Auto-recalculating due to payment field or item changes');
+      logDebug('Auto-recalculating due to payment field or item changes');
       calculateTotal(formData.contactLensItems, true); // Force as manual calculation
     }
   }, [
@@ -597,10 +593,10 @@ const ContactLensPage: React.FC = () => {
   // Helper function to convert database eye side values (lowercase) to UI values (titlecase)
   const convertEyeSideToUIFormat = (eyeSide: string): 'Right' | 'Left' | 'Both' => {
     // Log the raw input for debugging
-    console.log('convertEyeSideToUIFormat - raw input:', eyeSide);
+    logDebug('convertEyeSideToUIFormat - raw input', { eyeSide });
     
     if (!eyeSide) {
-      console.log('No eye side provided, defaulting to Both');
+      logDebug('No eye side provided, defaulting to Both');
       return 'Both';
     }
     
@@ -608,7 +604,7 @@ const ContactLensPage: React.FC = () => {
     const normalized = eyeSide.toString().trim().toLowerCase();
     
     // Log the normalized value for debugging
-    console.log('Normalized eye side:', normalized);
+    logDebug('Normalized eye side', { normalized });
     
     // Check for variations of 'right'
     if (['right', 'r', 're', 'od'].includes(normalized)) {
@@ -621,12 +617,12 @@ const ContactLensPage: React.FC = () => {
     }
     
     // Default to 'Both' for any other case
-    console.log('No matching eye side found, defaulting to Both');
+    logDebug('No matching eye side found, defaulting to Both');
     return 'Both';
   };
 
   const handleAddContactLens = (item: ContactLensItem) => {
-    console.log('Adding new contact lens item:', item);
+    logInfo('Adding new contact lens item', { item });
     
     // Check if we need to apply global discount to this item
     const globalDiscount = parseFloat(discountPercentage) || 0;
@@ -656,7 +652,7 @@ const ContactLensPage: React.FC = () => {
         amount: parseFloat(finalAmount.toFixed(2))
       };
       
-      console.log('Applied global discount to new item:', {
+      logDebug('Applied global discount to new item', {
         item: processedItem.side || 'Both',
         baseAmount,
         globalDiscount,
@@ -713,7 +709,7 @@ const ContactLensPage: React.FC = () => {
 const handlePatientSelect = (patientData: any) => {
   try {
     setIsLoadingFromDB(true);
-    console.log('DB LOAD STARTED - All calculations blocked until data load completes');
+    logInfo('DB load started - all calculations blocked until data load completes');
 
     // Copy merged fields from top-level to prescription if present
     if (patientData.birth_day) {
@@ -724,7 +720,7 @@ const handlePatientSelect = (patientData: any) => {
     }
 
     // Log values from database to help debugging
-    console.log('DEBUG - Database Values:', {
+    logDebug('Database values', {
       prescribed_by: patientData.prescription.prescribed_by,
       class: patientData.prescription.class,
       date: patientData.prescription.date,
@@ -740,7 +736,7 @@ const handlePatientSelect = (patientData: any) => {
         
     // In handlePatientSelect, before constructing newFormData, add detailed debug logs
     // Add detailed debug logging for date fields
-    console.log('🔍 DATE DEBUG - Raw patient data:', {
+    logDebug('DATE DEBUG - Raw patient data', {
       birth_day: patientData.prescription.birth_day,
       marriage_anniversary: patientData.prescription.marriage_anniversary,
       delivery_date: patientData.prescription.delivery_date,
@@ -750,14 +746,14 @@ const handlePatientSelect = (patientData: any) => {
     
     const rawBirthDay = patientData.prescription.birth_day;
     const convertedBirthDay = toDateInputValue(rawBirthDay);
-    console.log('🔍 BIRTHDAY DEBUG | Raw from DB:', rawBirthDay, '| After conversion:', convertedBirthDay);
+    logDebug('BIRTHDAY DEBUG', { rawBirthDay, convertedBirthDay });
     
     const rawMarriageAnniv = patientData.prescription.marriage_anniversary;
     const convertedMarriageAnniv = toDateInputValue(rawMarriageAnniv);
-    console.log('🔍 MARRIAGE ANNIV DEBUG | Raw from DB:', rawMarriageAnniv, '| After conversion:', convertedMarriageAnniv);
+    logDebug('MARRIAGE ANNIV DEBUG', { rawMarriageAnniv, convertedMarriageAnniv });
 
     // Log before setting form data
-    console.log('🔍 DEBUG - Setting form data with:', {
+    logDebug('Setting form data with', {
       birthDay: patientData.prescription?.birth_day,
       marriageAnniversary: patientData.prescription?.marriage_anniversary,
       birthDayConverted: toDateInputValue(patientData.prescription?.birth_day),
@@ -892,21 +888,21 @@ const handlePatientSelect = (patientData: any) => {
               newFormData.ipd = ipd;
             }
           } catch (e) {
-            console.error('Error calculating IPD:', e);
+            logError('Error calculating IPD in handlePatientSelect', e);
           }
         }
       }
       
       // If we have contact lens items, add them to the form
       if (patientData.items && patientData.items.length > 0) {
-        console.log('DETAILED DEBUG - Loading items from database', patientData.items);
+        logDebug('Loading items from database', { items: patientData.items });
         const mappedItems = patientData.items.map((item: any, index: number) => {
           // Parse quantity and rate ensuring they are numbers
           const qty = parseFloat(item.quantity) || 1; // Default to 1 if quantity is missing or zero
           const rate = parseFloat(item.rate) || 0;
           const baseAmount = qty * rate;
           
-          console.log(`Item ${index + 1} quantity parsing:`, {
+          logDebug(`Item ${index + 1} quantity parsing`, {
             raw_quantity: item.quantity,
             parsed_qty: qty,
             rate: rate,
@@ -914,17 +910,17 @@ const handlePatientSelect = (patientData: any) => {
           });
           
           // CRITICAL DEBUG: Log the exact raw database item to see all available fields
-          console.log(`DEBUG RAW DATABASE ITEM ${index + 1}:`, JSON.stringify(item));
+          logDev(`DEBUG RAW DATABASE ITEM ${index + 1}`, item);
           
           // Extract raw values for debugging
-          console.log(`RAW B/C VALUE FOR ITEM ${index + 1}:`, {
+          logDebug(`RAW B/C VALUE FOR ITEM ${index + 1}`, {
             raw_bc: item.base_curve,
             type: typeof item.base_curve,
             truthiness: !!item.base_curve
           });
           
           // CRITICAL DEBUGGING: Extract and compare all possible side field values
-          console.log(`SIDE FIELD ANALYSIS FOR ITEM ${index + 1}:`, {
+          logDebug(`SIDE FIELD ANALYSIS FOR ITEM ${index + 1}`, {
             raw_side: item.side,
             raw_side_type: typeof item.side,
             raw_eye_side: item.eye_side,
@@ -937,7 +933,7 @@ const handlePatientSelect = (patientData: any) => {
           });
           
           // CRITICAL DEBUG: Log all possible field names to understand database structure
-          console.log(`ALL POSSIBLE FIELD NAMES FOR ITEM ${index + 1}:`, {
+          logDebug(`ALL POSSIBLE FIELD NAMES FOR ITEM ${index + 1}`, {
             side: item.side,
             eye_side: item.eye_side,
             bc: item.bc,
@@ -972,7 +968,7 @@ const handlePatientSelect = (patientData: any) => {
           let finalAmount = baseAmount - discountAmount;
             
           // Log extracted values for debugging with exact field names
-          console.log(`Item ${index + 1} extracted values from keys:`, { 
+          logDebug(`Item ${index + 1} extracted values from keys`, { 
             discount_percent: item.discount_percent,
             discountPercent: item.discountPercent,
             discount_amount: item.discount_amount,
@@ -986,7 +982,7 @@ const handlePatientSelect = (patientData: any) => {
           
           // Fix quantity issues - if quantity is invalid but we have a discount percentage, we need to fix it
           if (qty === 0 && discountPercent > 0) {
-            console.log(`CRITICAL FIX: Item ${index + 1} has discount percent ${discountPercent}% but zero quantity. Fixing quantity to 1.`);
+            logWarn(`CRITICAL FIX: Item ${index + 1} has discount percent > 0 but zero quantity. Fixing quantity to 1.`, { index: index + 1, discountPercent });
             // Force quantity to 1 if it's zero but we have a discount percentage
             const fixedQty = 1;
             const fixedBaseAmount = fixedQty * rate;
@@ -996,7 +992,7 @@ const handlePatientSelect = (patientData: any) => {
             finalAmount = parseFloat((fixedBaseAmount * (1 - discountPercent/100)).toFixed(2));
             discountAmount = parseFloat((fixedBaseAmount * discountPercent/100).toFixed(2));
             
-            console.log(`Recalculated values with fixed quantity:`, {
+            logDebug(`Recalculated values with fixed quantity`, {
               fixedQty,
               fixedBaseAmount,
               discountPercent,
@@ -1009,32 +1005,30 @@ const handlePatientSelect = (patientData: any) => {
             // If discount percentage is available but amount is not, calculate it
             if (discountPercent > 0 && discountAmount === 0) {
               discountAmount = parseFloat((baseAmount * discountPercent / 100).toFixed(2));
-              console.log(`Calculated missing discount amount for item ${index + 1}:`, discountAmount);
+              logDebug(`Calculated missing discount amount for item ${index + 1}`, { discountAmount });
             }
             
             // If discount amount is available but percentage is not, calculate it
             if (discountAmount > 0 && discountPercent === 0 && baseAmount > 0) {
               discountPercent = parseFloat(((discountAmount / baseAmount) * 100).toFixed(2));
-              console.log(`Calculated missing discount percent for item ${index + 1}:`, discountPercent);
+              logDebug(`Calculated missing discount percent for item ${index + 1}`, { discountPercent });
             }
             
             // If final amount is not available but we have discount, calculate it
             if (finalAmount === 0 && (discountAmount > 0 || discountPercent > 0)) {
               finalAmount = parseFloat((baseAmount - discountAmount).toFixed(2));
-              console.log(`Calculated missing final amount for item ${index + 1}:`, finalAmount);
+              logDebug(`Calculated missing final amount for item ${index + 1}`, { finalAmount });
             }
           }
           
           // CRITICAL: Add detailed logging of all original item properties to find database fields
-          console.log(`Item ${index + 1} RAW DATABASE FIELDS:`, {
-            // List all possible field names to identify which ones exist in the data
+          logDebug(`Item ${index + 1} RAW DATABASE FIELDS`, {
             orig_discount_percent: item.discount_percent,
             orig_discountPercent: item.discountPercent,
             orig_disc_percent: item.disc_percent,
             orig_discount_amount: item.discount_amount,
             orig_discountAmount: item.discountAmount,
             orig_disc_amount: item.disc_amount,
-            // Show the normalized values we extracted
             normalized: {
               discountPercent,
               discountAmount,
@@ -1076,7 +1070,7 @@ const handlePatientSelect = (patientData: any) => {
           };
           
           // Log the final mapped item for verification - include ALL discount fields
-          console.log(`Final mapped item ${index + 1} COMPLETE:`, {
+          logDebug(`Final mapped item ${index + 1} COMPLETE`, {
             base: {
               qty: mappedItem.qty,
               rate: mappedItem.rate,
@@ -1115,7 +1109,7 @@ const handlePatientSelect = (patientData: any) => {
         
         // Initialize payment fields directly from database without any calculations
         if (patientData.payment) {
-          console.log('DEBUG - Using payment data directly from database', patientData.payment);
+          logDebug('Using payment data directly from database', { payment: patientData.payment });
           
           // CRITICAL: Ensure we're using the exact values from the database
           // Convert all values to strings to match the form data type
@@ -1136,7 +1130,7 @@ const handlePatientSelect = (patientData: any) => {
             newFormData.chequeAdv = patientData.payment.cheque_advance.toString();
           }
           
-          console.log('PAYMENT VALUES SET DIRECTLY FROM DATABASE (NO CALCULATIONS):', {
+          logDebug('PAYMENT VALUES SET DIRECTLY FROM DATABASE (NO CALCULATIONS)', {
             payment: newFormData.payment,
             estimate: newFormData.estimate,
             schAmt: newFormData.schAmt,
@@ -1144,7 +1138,7 @@ const handlePatientSelect = (patientData: any) => {
             balance: newFormData.balance
           });
           
-          console.log('PAYMENT VALUES FROM DATABASE (NO RECALCULATIONS):', {
+          logDebug('PAYMENT VALUES FROM DATABASE (NO RECALCULATIONS)', {
             payment: newFormData.payment,
             advance: newFormData.advance,
             balance: newFormData.balance
@@ -1152,7 +1146,7 @@ const handlePatientSelect = (patientData: any) => {
         }
         
         // Map payment fields from database to UI
-        console.log('DETAILED DEBUG - Payment data from database:', {
+        logDebug('DETAILED DEBUG - Payment data from database', {
           database_values: {
             payment_total: patientData.payment.payment_total,
             estimate: patientData.payment.estimate,
@@ -1198,13 +1192,13 @@ const handlePatientSelect = (patientData: any) => {
         if (patientData.payment.balance !== undefined && patientData.payment.balance !== null) {
           // Use the database balance value directly
           newFormData.balance = patientData.payment.balance.toString();
-          console.log('🔵 USING EXACT DATABASE BALANCE:', patientData.payment.balance);
+          logDebug('Using exact database balance', { balance: patientData.payment.balance });
         } else {
           // Only if balance is not in database, calculate it
           const paymentTotal = parseFloat(paymentTotalValue);
           const advance = parseFloat(newFormData.advance);
           newFormData.balance = Math.max(0, paymentTotal - advance).toFixed(2);
-          console.log('⚠️ DATABASE BALANCE NOT FOUND - Using calculated balance:', newFormData.balance);
+          logDebug('DATABASE BALANCE NOT FOUND - Using calculated balance', { balance: newFormData.balance });
         }
         
         // Individual advance fields - ensure proper type conversion
@@ -1223,14 +1217,14 @@ const handlePatientSelect = (patientData: any) => {
                                 patientData.payment.cheque_advance?.toString() || '0.00';
         
         // Do NOT recalculate when loading - display database values directly
-        console.log('Using database values directly without recalculation');
+        logDebug('Using database values directly without recalculation');
         
         // Payment method and date
         newFormData.paymentMethod = patientData.payment.payment_mode || 'Cash';
         newFormData.advDate = patientData.payment.payment_date || getTodayDate();
         
         // IMPORTANT DEBUG: Log the final values after type conversion
-        console.log('AFTER CONVERSION - Final payment values:', {
+        logDebug('AFTER CONVERSION - Final payment values', {
           payment: newFormData.payment,
           estimate: newFormData.estimate,
           schAmt: newFormData.schAmt,
@@ -1244,29 +1238,28 @@ const handlePatientSelect = (patientData: any) => {
       
       // Add extra debug to check contact lens items
       if (newFormData.contactLensItems && newFormData.contactLensItems.length > 0) {
-        console.log('DETAILED ITEM DEBUG - Final mapped items with discount values:', 
-          newFormData.contactLensItems.map(item => ({
+        logDebug('DETAILED ITEM DEBUG - Final mapped items with discount values', { 
+          items: newFormData.contactLensItems.map(item => ({
             qty: item.qty,
             rate: item.rate, 
             discountPercent: item.discountPercent,
             discountAmount: item.discountAmount,
             amount: item.amount
           }))
-        );
+        });
         
         // CRITICAL FIX: Ensure the payment data from database includes the discount values
-        // This is needed because sometimes the database returns payment totals but not item discounts
         if (patientData.payment) {
           const discountPercent = parseFloat(patientData.payment.discount_percent || '0');
           const discountAmount = parseFloat(patientData.payment.discount_amount || patientData.payment.scheme_discount || '0');
           
-          console.log('FOUND PAYMENT DISCOUNT VALUES FROM DB:', { discountPercent, discountAmount });
+          logDebug('FOUND PAYMENT DISCOUNT VALUES FROM DB', { discountPercent, discountAmount });
           
           // If we have any discount values in the payment but not in the items, apply them to all items
           if ((discountPercent > 0 || discountAmount > 0) && 
               newFormData.contactLensItems.every(item => !item.discountPercent && !item.discountAmount)) {
             
-            console.log('APPLYING PAYMENT DISCOUNT TO ITEMS - Items had no discount values but payment did');
+            logDebug('APPLYING PAYMENT DISCOUNT TO ITEMS - Items had no discount values but payment did');
             
             // Calculate correct discount values for each item based on payment totals
             newFormData.contactLensItems = newFormData.contactLensItems.map(item => {
@@ -1278,14 +1271,6 @@ const handlePatientSelect = (patientData: any) => {
                 // Calculate discount amount based on percentage
                 const calculatedAmount = baseAmount * discountPercent / 100;
                 itemDiscountAmount = parseFloat(calculatedAmount.toFixed(2));
-                
-                // Debug calculation
-                console.log('Calculating discount amount:', { 
-                  baseAmount, 
-                  discountPercent, 
-                  calculatedAmount,
-                  itemDiscountAmount
-                });
               } else if (discountAmount > 0) {
                 // Calculate percentage based on total discount amount and item proportion
                 const totalBeforeDiscount = newFormData.contactLensItems.reduce(
@@ -1295,14 +1280,13 @@ const handlePatientSelect = (patientData: any) => {
                 itemDiscountAmount = parseFloat((discountAmount * itemProportion).toFixed(2));
                 itemDiscountPercent = parseFloat(((itemDiscountAmount / baseAmount) * 100).toFixed(2));
               }
-              
               // Calculate final amount after discount
               // CRITICAL: Handle the zero quantity edge case
               const finalAmount = baseAmount > 0 ? 
                 parseFloat((baseAmount - itemDiscountAmount).toFixed(2)) : 
                 parseFloat((item.rate - (item.rate * itemDiscountPercent / 100)).toFixed(2)); // Use item.rate directly if qty is 0
-              
-              console.log(`Applied discount to item: Base=${baseAmount}, DiscPercent=${itemDiscountPercent}, DiscAmt=${itemDiscountAmount}, Final=${finalAmount}`);
+              // Debug calculation
+              logDebug('Calculating discount amount', { baseAmount, itemDiscountPercent, itemDiscountAmount, finalAmount });
               
               return {
                 ...item,
@@ -1323,7 +1307,7 @@ const handlePatientSelect = (patientData: any) => {
       // We'll use ONLY the newFormData we've already prepared to avoid recalculations
       setFormData(prevState => {
         // Keep a record of the loaded database values for debugging
-        console.log('FINAL DB LOAD - Payment data from database:', {
+        logDebug('FINAL DB LOAD - Payment data from database', {
           payment_total: patientData.payment?.payment_total || 0,
           scheme_discount: patientData.payment?.scheme_discount || 0,
           estimate_amount: patientData.payment?.estimate_amount || 0,
@@ -1345,23 +1329,23 @@ const handlePatientSelect = (patientData: any) => {
       // CRITICAL: With DB values loaded, we should NEVER recalculate totals
       // Only in the rare case of no payment data at all, we might need initial calculation
       if (!patientData.payment && newFormData.contactLensItems && newFormData.contactLensItems.length > 0) {
-        console.log('No payment data from database, calculating initial totals from items');
+        logDebug('No payment data from database, calculating initial totals from items');
         // Specify this is NOT a manual calculation (loading from DB)
         calculateTotal(newFormData.contactLensItems, false); 
       } else {
-        console.log('SKIPPING CALCULATION - Using exact database values without any recalculation');
+        logDebug('SKIPPING CALCULATION - Using exact database values without any recalculation');
         // Explicit log to confirm we're NOT calling calculateTotal() here
-        console.log('DB LOAD: Payment values preserved exactly as loaded from database');
+        logDebug('DB LOAD: Payment values preserved exactly as loaded from database');
       }
       
       // Set flag to indicate DB loading is complete - this allows future UI interactions
       // to calculate values as needed
       setTimeout(() => {
-        console.log('DB LOAD COMPLETED - Calculations no longer blocked');
+        logDebug('DB LOAD COMPLETED - Calculations no longer blocked');
         setIsLoadingFromDB(false);
         
         // FINAL VALIDATION: Verify the discount values are properly loaded in the UI
-        console.log('VALIDATION CHECK - Final state of contact lens items:', 
+        logDebug('VALIDATION CHECK - Final state of contact lens items',
           newFormData.contactLensItems.map(item => ({
             qty: item.qty,
             rate: item.rate,
@@ -1386,10 +1370,10 @@ const handlePatientSelect = (patientData: any) => {
       
       // IMPORTANT: Reset the loading flag now that all data is loaded successfully
       setIsLoadingFromDB(false);
-      console.log('DB LOAD COMPLETED - Calculations no longer blocked');
+      logDebug('DB LOAD COMPLETED - Calculations no longer blocked');
       
     } catch (error) {
-      console.error('Error mapping patient data to form:', error);
+      logError('Error mapping patient data to form', error);
       setNotification({
         message: 'Error loading patient data',
         type: 'error',
@@ -1398,7 +1382,7 @@ const handlePatientSelect = (patientData: any) => {
       
       // IMPORTANT: Reset the loading flag in case of error too
       setIsLoadingFromDB(false);
-      console.log('DB LOAD FAILED - Calculations no longer blocked');
+      logDebug('DB LOAD FAILED - Calculations no longer blocked');
     }
   };  
 
@@ -1579,7 +1563,7 @@ const handlePatientSelect = (patientData: any) => {
           <Button
             onClick={async () => {
               // Save logic from the removed green button
-              console.log('SAVE DATA button clicked at ' + new Date().toISOString());
+              logDebug('SAVE DATA button clicked', { timestamp: new Date().toISOString() });
               if (!formData.prescriptionNo) {
                 alert('❌ Prescription number is required');
                 setNotification({ message: 'Prescription number is required', type: 'error', visible: true });
@@ -1666,7 +1650,7 @@ const handlePatientSelect = (patientData: any) => {
                 const totalAdvance = cashAdvance + cardUpiAdvance + chequeAdvance;
                 const actualBalance = totalAfterDiscount - totalAdvance;
                 // Debug log date values before submission
-                console.log('🔍 DATE DEBUG - Before submission:', {
+                logDebug('DATE DEBUG - Before submission', {
                   birthDay: {
                     raw: formData.birthDay,
                     converted: toDateInputValue(formData.birthDay)
@@ -1723,19 +1707,19 @@ const handlePatientSelect = (patientData: any) => {
                 const contactLensData = { prescription, eyes, items, payment };
                 const result = await contactLensService.saveContactLensPrescription(contactLensData);
                 if (result.success) {
-                  console.log('Contact lens data saved successfully!', result);
+                  logDebug('Contact lens data saved successfully', { result });
                   alert('✅ Contact lenses saved successfully!');
                   setNotification({ message: 'Contact lenses saved successfully to database!', type: 'success', visible: true });
                   if (result.id) {
                     setFormData(prev => ({ ...prev, id: result.id }));
                   }
                 } else {
-                  console.error('Failed to save contact lens data:', result.message);
+                  logError('Failed to save contact lens data', { message: result.message });
                   alert('❌ Save failed: ' + (result.message || 'Unknown error'));
                   setNotification({ message: `Failed to save contact lens data: ${result.message || 'Unknown error'}`, type: 'error', visible: true });
                 }
               } catch (error) {
-                console.error('Error preparing data:', error);
+                logError('Error preparing data', error);
                 alert('❌ Error: ' + (error instanceof Error ? error.message : 'Unknown error preparing data'));
                 setNotification({ message: `Error preparing data: ${error instanceof Error ? error.message : 'Unknown error'}`, type: 'error', visible: true });
               } finally {

@@ -10,6 +10,7 @@ import {
   calculateSphericalEquivalent,
   formatPrescriptionNumber
 } from '../../utils/prescriptionUtils';
+import { logError, logInfo } from '../../utils/logger';
 
 interface ContactLensPrescriptionSectionProps {
   formData: ContactLensFormData;
@@ -91,7 +92,7 @@ const ContactLensPrescriptionSection: React.FC<ContactLensPrescriptionSectionPro
     const { value, name } = e.target;
     
     if (!name) {
-      console.error('[handleVnChange] Missing name on event target:', e.target, e);
+      logError('[handleVnChange] Missing name on event target', { target: e.target, event: e });
       console.trace();
       return;
     }
@@ -461,7 +462,7 @@ const ContactLensPrescriptionSection: React.FC<ContactLensPrescriptionSectionPro
       <div className="mt-2 flex justify-end">
         <button
           onClick={() => {
-            console.log('K-Reading button pressed');
+            logInfo('K-Reading button pressed');
             alert('K-Reading functionality will be implemented here');
           }}
           className="bg-blue-100 hover:bg-blue-200 text-blue-800 text-sm py-1 px-2 rounded"

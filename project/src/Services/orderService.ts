@@ -1,5 +1,6 @@
 // src/Services/orderService.ts
 import { supabase } from './supabaseService';
+import { logInfo, logError, logDebug, logWarn, logDev } from '../utils/logger';
 
 // Types for order data
 interface OrderItem {
@@ -67,14 +68,14 @@ const generateBillNo = (): string => {
 // Save order with items and payment details to Supabase
 export const saveOrder = async (orderData: OrderData): Promise<{ success: boolean; message: string; orderId?: string }> => {
   try {
-    console.log('====================== SAVE ORDER DEBUG START ======================');
-    console.log('Saving order data:', JSON.stringify(orderData, null, 2));
-    console.log('Connection info:', {
+    logInfo('====================== SAVE ORDER DEBUG START ======================');
+    logInfo('Saving order data:', JSON.stringify(orderData, null, 2));
+    logInfo('Connection info:', {
       functions: Object.keys(supabase).join(', ')
     });
     
     // Check if the tables exist in the database
-    console.log('Checking database schema for order tables...');
+    logInfo('Checking database schema for order tables...');
     try {
       const { data: schemaData, error: schemaError } = await supabase
         .from('information_schema.tables')
@@ -82,7 +83,7 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
         .eq('table_schema', 'public')
         .in('table_name', ['orders', 'order_items', 'order_payments']);
         
-      console.log('Schema check result:', {
+      logInfo('Schema check result:', {
         success: !schemaError, 
         tables: schemaData ? schemaData.map(t => t.table_name).join(', ') : 'No tables found',
         error: schemaError ? schemaError.message : null
@@ -90,45 +91,45 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       
       // If no tables were found, let's explain why this might be happening
       if (!schemaData || schemaData.length === 0) {
-        console.warn('⚠️ ORDER TABLES NOT FOUND IN DATABASE ⚠️');
-        console.warn('Possible causes:');
-        console.warn('1. The tables were added to schema.sql but not executed in the database');
-        console.warn('2. The schema.sql changes were not saved or committed');
-        console.warn('3. The tables have different names than expected');
-        console.warn('4. There might be permission issues');
+        logWarn('⚠️ ORDER TABLES NOT FOUND IN DATABASE ⚠️');
+        logWarn('Possible causes:');
+        logWarn('1. The tables were added to schema.sql but not executed in the database');
+        logWarn('2. The schema.sql changes were not saved or committed');
+        logWarn('3. The tables have different names than expected');
+        logWarn('4. There might be permission issues');
       }
     } catch (schemaCheckErr) {
-      console.error('Schema check failed:', schemaCheckErr);
+      logError('Schema check failed:', schemaCheckErr);
     }
     
     // Test connection first
-    console.log('Testing database connection...');
+    logInfo('Testing database connection...');
     try {
       const { data: testData, error: testError } = await supabase
         .from('prescriptions')
         .select('id')
         .limit(1);
         
-      console.log('Database connection test:', { success: !testError, error: testError?.message, data: testData });
+      logInfo('Database connection test:', { success: !testError, error: testError?.message, data: testData });
     } catch (testErr) {
-      console.error('Connection test failed:', testErr);
+      logError('Connection test failed:', testErr);
     }
     
     // Check if tables exist
-    console.log('Checking if tables exist...');
+    logInfo('Checking if tables exist...');
     try {
       const { data: orderTableInfo, error: tableError } = await supabase
         .from('orders')
         .select('id')
         .limit(1);
         
-      console.log('Order table check:', { exists: !tableError, error: tableError ? tableError.message : null });
+      logInfo('Order table check:', { exists: !tableError, error: tableError ? tableError.message : null });
     } catch (tableErr) {
-      console.error('Table check failed:', tableErr);
+      logError('Table check failed:', tableErr);
     }
     
     // Let's check if the prescription actually exists first
-    console.log(`Verifying prescription ID exists: ${orderData.prescriptionId}`);
+    logInfo(`Verifying prescription ID exists: ${orderData.prescriptionId}`);
     try {
       const { data: prescriptionCheck, error: prescriptionCheckError } = await supabase
         .from('prescriptions')
@@ -136,15 +137,15 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
         .eq('id', orderData.prescriptionId);
         
       if (prescriptionCheckError || !prescriptionCheck || prescriptionCheck.length === 0) {
-        console.error('⚠️ Prescription ID verification failed:', {
+        logError('⚠️ Prescription ID verification failed:', {
           error: prescriptionCheckError?.message,
           prescriptionFound: prescriptionCheck && prescriptionCheck.length > 0
         });
       } else {
-        console.log('✅ Prescription ID verified:', prescriptionCheck[0].id);
+        logInfo('✅ Prescription ID verified:', prescriptionCheck[0].id);
       }
     } catch (prescCheckErr) {
-      console.error('Prescription check error:', prescCheckErr);
+      logError('Prescription check error:', prescCheckErr);
     }
     
     // Prevent duplicate orders with the same order_no
@@ -159,7 +160,7 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
     }
     
     // Create order with explicit debug info
-    console.log('Attempting to create order record...');
+    logInfo('Attempting to create order record...');
     const orderInsertData = {
       prescription_id: orderData.prescriptionId,
       order_no: orderData.orderNo,
@@ -171,9 +172,9 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       booking_by: orderData.bookingBy
     };
     
-    console.log('Order insert data:', orderInsertData);
-    console.log('Order insert data (JSON):', JSON.stringify(orderInsertData, null, 2));
-    console.log('Order insert data (stringified):', JSON.stringify(orderInsertData));
+    logInfo('Order insert data:', orderInsertData);
+    logInfo('Order insert data (JSON):', JSON.stringify(orderInsertData, null, 2));
+    logInfo('Order insert data (stringified):', JSON.stringify(orderInsertData));
     
     // Try to insert with explicit error handling
     let order = null;
@@ -199,22 +200,22 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       orderError = result.error;
       
       // Check the raw response for more detailed debug info
-      console.log('Raw order insert response:', result);
+      logInfo('Raw order insert response:', result);
     } catch (insertErr) {
-      console.error('❌ Order insert exception:', insertErr);
+      logError('❌ Order insert exception:', insertErr);
       orderError = { message: `Exception during insert: ${insertErr instanceof Error ? insertErr.message : 'Unknown error'}` };
     }
     
     if (orderError) {
-      console.error('Error saving order:', orderError);
+      logError('Error saving order:', orderError);
       return { success: false, message: `Error saving order: ${orderError.message}` };
     }
     
-    console.log('Order saved successfully:', order);
+    logInfo('Order saved successfully:', order);
     const orderId = order.id;
     
-    console.log('Order created successfully:', order);
-    console.log('Creating order items...');
+    logInfo('Order created successfully:', order);
+    logInfo('Creating order items...');
     
     // Create order items, mapping carefully to schema fields
     const orderItems = orderData.items.map(item => {
@@ -237,7 +238,7 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       };
       
       // Log each item for debugging
-      console.log(`Mapped order item ${item.si}:`, mappedItem);
+      logInfo(`Mapped order item ${item.si}:`, mappedItem);
       
       return mappedItem;
     });
@@ -252,14 +253,14 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
     const newItems = orderItems.filter(item => !existingItemCodes.has(item.item_code));
       
     if (newItems.length === 0) {
-      console.log('No new order items to insert (all would be duplicates).');
+      logInfo('No new order items to insert (all would be duplicates).');
     } else {
       const { error: itemsError } = await supabase
         .from('order_items')
         .insert(newItems);
-    console.log('Order items insertion result:', { success: !itemsError, error: itemsError ? itemsError.message : null });
+    logInfo('Order items insertion result:', { success: !itemsError, error: itemsError ? itemsError.message : null });
     if (itemsError) {
-      console.error('Error saving order items:', itemsError);
+      logError('Error saving order items:', itemsError);
       // Consider rolling back the order if items can't be saved
       await supabase.from('orders').delete().eq('id', orderId);
       return { success: false, message: `Error saving order items: ${itemsError.message}` };
@@ -267,7 +268,7 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
     }
     
     // Create order payment with careful field mapping
-    console.log('Creating order payment...');
+    logInfo('Creating order payment...');
     const paymentData = {
       order_id: orderId,
       payment_estimate: typeof orderData.payment.paymentEstimate === 'string' ? 
@@ -296,7 +297,7 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
         orderData.payment.scheduleAmount
     };
     
-    console.log('Payment data:', paymentData);
+    logInfo('Payment data:', paymentData);
     const { error: paymentError } = await supabase
       .from('order_payments')
       .insert({
@@ -312,15 +313,15 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       });
     
     if (paymentError) {
-      console.error('Error saving order payment:', paymentError);
+      logError('Error saving order payment:', paymentError);
       // Consider rolling back the order and items if payment can't be saved
       await supabase.from('order_items').delete().eq('order_id', orderId);
       await supabase.from('orders').delete().eq('id', orderId);
       return { success: false, message: `Error saving order payment: ${(paymentError as any).message}` };
     }
     
-    console.log('Payment insertion result:', { success: !paymentError, error: paymentError ? (paymentError as any).message : null });
-    console.log('====================== SAVE ORDER DEBUG END ======================');
+    logInfo('Payment insertion result:', { success: !paymentError, error: paymentError ? (paymentError as any).message : null });
+    logInfo('====================== SAVE ORDER DEBUG END ======================');
     
     return { 
       success: true, 
@@ -328,8 +329,8 @@ export const saveOrder = async (orderData: OrderData): Promise<{ success: boolea
       orderId 
     };
   } catch (error) {
-    console.error('====================== SAVE ORDER ERROR ======================');
-    console.error('Unexpected error saving order:', error);
+    logError('====================== SAVE ORDER ERROR ======================');
+    logError('Unexpected error saving order:', error);
     return { 
       success: false, 
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -351,18 +352,18 @@ export const getOrdersByPrescriptionId = async (prescriptionId: string) => {
       .order('created_at', { ascending: false });
     
     if (error) {
-      console.error('Error fetching orders:', error);
+      logError('Error fetching orders:', error);
       return { success: false, message: error.message, data: null };
     }
 
-    console.log('Orders found:', data);
+    logInfo('Orders found:', data);
     return { 
       success: true, 
       message: 'Orders fetched successfully', 
       data 
     };
   } catch (error) {
-    console.error('Unexpected error fetching orders:', error);
+    logError('Unexpected error fetching orders:', error);
     return { 
       success: false, 
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -385,18 +386,18 @@ export const getOrderById = async (orderId: string) => {
       .single();
     
     if (error) {
-      console.error('Error fetching order:', error);
+      logError('Error fetching order:', error);
       return { success: false, message: error.message, data: null };
     }
 
-    console.log('Order found:', data);
+    logInfo('Order found:', data);
     return { 
       success: true, 
       message: 'Order fetched successfully', 
       data 
     };
   } catch (error) {
-    console.error('Unexpected error fetching order:', error);
+    logError('Unexpected error fetching order:', error);
     return { 
       success: false, 
       message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -419,7 +420,7 @@ const checkNumberExists = async (type: 'prescription' | 'reference', number: str
     if (error) throw error;
     return !!data;
   } catch (error) {
-    console.error(`Error checking ${type} number:`, error);
+    logError(`Error checking ${type} number:`, error);
     throw error;
   }
 };
@@ -442,7 +443,7 @@ const generateUniquePrescriptionNumber = async (maxRetries = 3): Promise<string>
         return prescriptionNo;
       }
     } catch (error) {
-      console.error(`Attempt ${attempt}: Error generating prescription number:`, error);
+      logError(`Attempt ${attempt}: Error generating prescription number:`, error);
       if (attempt === maxRetries) throw error;
     }
   }

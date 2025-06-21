@@ -2,6 +2,7 @@ import React from 'react';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
 import { ContactLensFormData } from './ContactLensTypes';
+import { logDebug } from '../../utils/logger';
 
 interface ContactLensPaymentProps {
   formData: ContactLensFormData;
@@ -72,7 +73,7 @@ const ContactLensPayment: React.FC<ContactLensPaymentProps> = ({
       }, 0);
 
   // Log debugging info AFTER functions are defined
-  console.log('PaymentSection - DEBUG INFO:', {
+  logDebug('PaymentSection - DEBUG INFO', {
     sourceType: formData.sourceType || 'UNKNOWN',
     formData: {
       advance: formData.advance,

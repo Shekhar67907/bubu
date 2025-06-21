@@ -18,6 +18,8 @@ import ToastNotification from '../ui/ToastNotification';
 import { supabase } from '../../Services/supabaseService';
 import { useNavigate } from 'react-router-dom';
 import { printOrderCard } from '../../utils/printOrderService';
+// Import logger utility
+import { logInfo, logError, logDebug, logDev, logWarn } from '../../utils/logger';
 
 // Interface for the structure of a search suggestion (based on API response which is a full Prescription object)
 interface SearchSuggestion extends PrescriptionFormData {
@@ -150,8 +152,9 @@ const OrderCardForm: React.FC = () => {
           prescriptionNo: newPrescriptionNo,
           referenceNo: generateReferenceNumber(newPrescriptionNo) // Set reference same as prescription by default
         }));
+        logInfo('Generated initial prescription number', { prescriptionNo: newPrescriptionNo });
       } catch (error) {
-        console.error('Failed to generate initial prescription number:', error);
+        logError('Failed to generate initial prescription number', error);
         // Fallback to a timestamp-based number if generation fails
         const fallback = `P${new Date().getTime().toString().slice(-10)}`;
         setFormData(prev => ({
@@ -159,6 +162,7 @@ const OrderCardForm: React.FC = () => {
           prescriptionNo: fallback,
           referenceNo: fallback
         }));
+        logWarn('Fallback to timestamp-based prescription number', { fallback });
       }
     };
     
@@ -218,7 +222,7 @@ const OrderCardForm: React.FC = () => {
     // CRITICAL FIX: Skip recalculation when data is from database
     // This ensures we don't override the database values with calculated ones
     if (formData.isFromDatabase) {
-      console.log('SKIPPING payment recalculation because data is from database');
+      logDebug('Skipping payment recalculation because data is from database', { isFromDatabase: true });
       return; // Exit early - don't recalculate when data is from database
     }
     
@@ -262,7 +266,7 @@ const OrderCardForm: React.FC = () => {
       // Balance = final amount - total advance (ensuring it's not negative)
       const balance = Math.max(0, finalAmount - totalAdvance);
       
-      console.log('Payment Calculation Debug (NEW VALUES):', {
+      logDebug('Payment Calculation Debug (NEW VALUES)', {
         totalBaseAmount,
         totalTaxAmount,
         totalDiscountAmount,
@@ -285,7 +289,7 @@ const OrderCardForm: React.FC = () => {
         // Removed advance: totalAdvance.toFixed(2) to prevent the loop
       }));
     } catch (error) {
-      console.error('Error in payment calculation:', error);
+      logError('Error in payment calculation:', error);
     }
   }, [
     formData.selectedItems,
@@ -308,6 +312,7 @@ const OrderCardForm: React.FC = () => {
     if (!isNaN(rpdValue) && !isNaN(lpdValue) && (rpdValue > 0 || lpdValue > 0)) {
         const calculatedIPD = (rpdValue + lpdValue).toFixed(1);
         setFormData(prev => ({ ...prev, ipd: calculatedIPD }));
+        logDebug('Calculated IPD from RPD and LPD', { rpdValue, lpdValue, calculatedIPD });
     } else {
          setFormData(prev => ({ ...prev, ipd: '' }));
       }
@@ -370,10 +375,10 @@ const OrderCardForm: React.FC = () => {
           default: return; // Don't search for other fields
         }
 
-        console.log(`Searching for ${column} containing: ${query}`);
+        logDebug(`Searching for ${column} containing: ${query}`);
         
         // Use Supabase to query the database with join to eye_prescriptions, prescription_remarks, orders, order_items, and order_payments
-        console.log(`Executing query for ${column}=${query}`);
+        logDebug(`Executing query for ${column}=${query}`);
         let { data, error } = await supabase
           .from('prescriptions')
           .select(`
@@ -403,7 +408,7 @@ const OrderCardForm: React.FC = () => {
         }
           
         if (error) {
-          console.error('Supabase search error:', error);
+          logError('Supabase search error:', error);
           setNotification({
             message: `Search failed: ${error.message}`,
             type: 'error',
@@ -414,18 +419,18 @@ const OrderCardForm: React.FC = () => {
         }
         
         if (!data || data.length === 0) {
-          console.log('No search results found');
+          logDebug('No search results found');
           setSuggestions([]);
           return;
         }
           
-        console.log('Search results:', data);
-        console.log('Raw data with eye_prescriptions:', data);
+        logDebug('Search results:', data);
+        logDebug('Raw data with eye_prescriptions:', data);
       
-      console.log('Raw data from API before transformation:', data);
-      console.log('Sample item from database:', data[0]);
-      console.log('Title from database:', data[0]?.title);
-      console.log('Gender from database:', data[0]?.gender);
+      logDebug('Raw data from API before transformation:', data);
+      logDebug('Sample item from database:', data[0]);
+      logDebug('Title from database:', data[0]?.title);
+      logDebug('Gender from database:', data[0]?.gender);
       
       // Transformation of database results to match your interface including eye prescriptions
       const transformedData: SearchSuggestion[] = data.map((item: any) => {
@@ -444,13 +449,13 @@ const OrderCardForm: React.FC = () => {
         const orderPayment = latestOrder?.order_payments?.[0] || null;
         
         // Log the raw order payment object to inspect all available fields
-        console.log('RAW ORDER PAYMENT OBJECT WITH ALL FIELDS:', {
+        logDebug('RAW ORDER PAYMENT OBJECT WITH ALL FIELDS:', {
           orderPayment,
           allKeys: orderPayment ? Object.keys(orderPayment) : [],
           allValues: orderPayment ? Object.values(orderPayment) : []
         });
         
-        console.log('RAW ORDER PAYMENT DATA FROM DB:', orderPayment);
+        logDebug('RAW ORDER PAYMENT DATA FROM DB:', orderPayment);
         
         // Extract payment values for easier access
         const paymentEstimate = orderPayment?.payment_estimate || 0;
@@ -465,7 +470,7 @@ const OrderCardForm: React.FC = () => {
         const balance = orderPayment?.balance || 0;
         
         // Log the order payment data to identify the issue
-        console.log('DETAILED ORDER PAYMENT VALUES FROM DATABASE:', {
+        logDebug('DETAILED ORDER PAYMENT VALUES FROM DATABASE:', {
           raw: orderPayment,
           rawFields: {
             payment_estimate: orderPayment?.payment_estimate,
@@ -516,7 +521,7 @@ const OrderCardForm: React.FC = () => {
         };
         
         // Log the full structure of the payment data for debugging
-        console.log('Found order data:', { 
+        logDebug('Found order data:', { 
           latestOrder, 
           orderItems, 
           orderPayment,
@@ -535,14 +540,16 @@ const OrderCardForm: React.FC = () => {
         const findEyeData = (eyeType: string, visionType: string, field: string, defaultValue: string = '') => {
           // Log the eyePrescriptions array for debugging
           if (eyeType === 'right' && visionType === 'distance' && field === 'sph') {
-            console.log('Eye Prescriptions array:', eyePrescriptions);
-            console.log('Looking for records with eye_type:', eyeType, 'vision_type:', visionType);
-            
+            logDebug('Eye Prescriptions array:', eyePrescriptions);
+            logDebug('Looking for records with eye_type:', eyeType);
+            logDebug('Looking for records with vision_type:', visionType);
             // Detailed inspection of the first record to see field names
             if (eyePrescriptions.length > 0) {
-              console.log('First record field names:', Object.keys(eyePrescriptions[0]));
-              console.log('First record eye_type value:', eyePrescriptions[0].eye_type);
-              console.log('First record vision_type value:', eyePrescriptions[0].vision_type);
+              logDebug('First record details', {
+                fieldNames: Object.keys(eyePrescriptions[0]),
+                eyeTypeValue: eyePrescriptions[0].eye_type,
+                visionTypeValue: eyePrescriptions[0].vision_type
+              });
             }
           }
           
@@ -554,9 +561,9 @@ const OrderCardForm: React.FC = () => {
             
             // Log each record for debugging
             if (eyeType === 'right' && visionType === 'distance' && field === 'sph') {
-              console.log(`Checking record:`, ep);
-              console.log(`Record eye type: ${recordEyeType}, Record vision type: ${recordVisionType}`);
-              console.log(`Comparing with: ${eyeType}, ${visionType}`);
+              logDebug(`Checking record:`, ep);
+              logDebug(`Record eye type: ${recordEyeType}, Record vision type: ${recordVisionType}`);
+              logDebug(`Comparing with: ${eyeType}, ${visionType}`);
             }
             
             // Map vision types from UI format to database format
@@ -581,7 +588,7 @@ const OrderCardForm: React.FC = () => {
           
           // Log the found prescription for debugging
           if (eyeType === 'right' && visionType === 'distance' && field === 'sph') {
-            console.log(`Found prescription for ${eyeType} eye, ${visionType} vision:`, prescription);
+            logDebug(`Found prescription for ${eyeType} eye, ${visionType} vision:`, prescription);
           }
           
           // If we found a matching prescription, extract the requested field
@@ -615,7 +622,7 @@ const OrderCardForm: React.FC = () => {
             
             // Special case for add_power
             if (field === 'add_power') {
-              console.log(`Found possible add values:`, {
+              logDebug(`Found possible add values:`, {
                 add_power: prescription.add_power,
                 add: prescription.add,
                 addition: prescription.addition
@@ -770,7 +777,7 @@ const OrderCardForm: React.FC = () => {
           
         setSuggestions(transformedData);
       } catch (error) {
-        console.error('Search error:', error);
+        logError('Search error:', error);
         setNotification({
           message: error instanceof Error ? `Search error: ${error.message}` : 'An unknown error occurred during search',
           type: 'error',
@@ -798,9 +805,9 @@ const OrderCardForm: React.FC = () => {
   
   // Handle suggestion selection
   const handleSuggestionSelect = async (suggestion: SearchSuggestion) => {
-    console.log('Selected suggestion:', suggestion);
-    console.log('Title from suggestion:', suggestion.title);
-    console.log('Gender from suggestion:', suggestion.gender);
+    logDebug('Selected suggestion:', suggestion);
+    logDebug('Title from suggestion:', suggestion.title);
+    logDebug('Gender from suggestion:', suggestion.gender);
     
     // Get the prescription ID from the suggestion
     const prescriptionId = suggestion.id;
@@ -817,7 +824,7 @@ const OrderCardForm: React.FC = () => {
       
       // If we have a prescription ID, directly fetch the latest order and payment data
       if (!isNewOrder && prescriptionId) {
-        console.log(`Fetching latest order data for prescription ID: ${prescriptionId}`);
+        logDebug(`Fetching latest order data for prescription ID: ${prescriptionId}`);
         
         // 1. First get the latest order for this prescription
         const { data: orderData, error: orderError } = await supabase
@@ -828,13 +835,13 @@ const OrderCardForm: React.FC = () => {
           .limit(1);
           
         if (orderError) {
-          console.error('Error fetching order data:', orderError);
+          logError('Error fetching order data:', orderError);
           throw new Error(`Failed to fetch order data: ${orderError.message}`);
         }
         
         if (orderData && orderData.length > 0) {
           latestOrder = orderData[0];
-          console.log('Latest order found:', latestOrder);
+          logDebug('Latest order found:', latestOrder);
           
           // 2. Now fetch the payment data for this order
           const orderId = latestOrder.id;
@@ -845,13 +852,13 @@ const OrderCardForm: React.FC = () => {
             .maybeSingle();
             
           if (paymentError) {
-            console.error('Error fetching payment data:', paymentError);
+            logError('Error fetching payment data:', paymentError);
             throw new Error(`Failed to fetch payment data: ${paymentError.message}`);
           }
           
           if (paymentData) {
             orderPayment = paymentData;
-            console.log('DIRECT DATABASE ORDER PAYMENT DATA:', {
+            logDebug('DIRECT DATABASE ORDER PAYMENT DATA:', {
               raw: orderPayment,
               critical_values: {
                 payment_estimate: orderPayment.payment_estimate,
@@ -861,6 +868,7 @@ const OrderCardForm: React.FC = () => {
                 advance_other: orderPayment.advance_other,
                 total_advance: orderPayment.total_advance,
                 balance: orderPayment.balance,
+                schedule_amount: orderPayment.schedule_amount
               },
               stringified: {
                 payment_estimate: orderPayment.payment_estimate?.toString(),
@@ -868,10 +876,10 @@ const OrderCardForm: React.FC = () => {
               }
             });
           } else {
-            console.log('No payment data found for this order');
+            logDebug('No payment data found for this order');
           }
         } else {
-          console.log('No orders found for this prescription');
+          logDebug('No orders found for this prescription');
         }
       }
       
@@ -893,7 +901,7 @@ const OrderCardForm: React.FC = () => {
       }
       
       // Enhanced payment data debugging
-      console.log('DIRECT PAYMENT DATA FROM DATABASE:', {
+      logDebug('DIRECT PAYMENT DATA FROM DATABASE:', {
         orderPayment: orderPayment ? {
           payment_estimate: orderPayment.payment_estimate,
           tax_amount: orderPayment.tax_amount,
@@ -930,14 +938,14 @@ const OrderCardForm: React.FC = () => {
         }
       });
       
-      console.log('Order details:', {
+      logDebug('Order details:', {
         isNewOrder,
         prescriptionNumber,
         referenceNumber,
         suggestionId: suggestion.id
       });
     } catch (error) {
-      console.error('Error in handleSuggestionSelect:', error instanceof Error ? error.message : 'Unknown error');
+      logError('Error in handleSuggestionSelect:', error instanceof Error ? error.message : 'Unknown error');
     }
     
     // Populate form data with the selected suggestion's data
@@ -1186,7 +1194,7 @@ const OrderCardForm: React.FC = () => {
 
     // Skip processing if name is undefined
     if (!name) {
-      console.error('Input name is undefined in handleNumericInputChange');
+      logError('Input name is undefined in handleNumericInputChange');
       return;
     }
 
@@ -1229,6 +1237,7 @@ const OrderCardForm: React.FC = () => {
     // After handling the change, check if this is a payment field and recalculate balance if needed
     if (['paymentEstimate', 'cashAdv1', 'ccUpiAdv', 'advanceOther'].includes(name)) {
       updateBalanceAfterPaymentChange();
+      logDebug('Payment field changed, recalculated balance', { name, value: processedValue });
     }
   };
   
@@ -1261,7 +1270,7 @@ const OrderCardForm: React.FC = () => {
       // Calculate balance - payment estimate minus total advance
       const balance = Math.max(0, paymentEstimate - totalAdvance);
       
-      console.log('Payment calculation:', {
+      logDebug('Payment calculation:', {
         isExistingRecord,
         inputs: {
           paymentEstimate,
@@ -1384,7 +1393,7 @@ const OrderCardForm: React.FC = () => {
     
     // Add a small delay to ensure the state update completes before submission
     setTimeout(() => {
-      console.log('Order Card Form Submitted:', formData);
+      logInfo('Order Card Form Submitted', { prescriptionNo: formData.prescriptionNo, referenceNo: formData.referenceNo, user: formData.name });
       
       // Call the function to save the order to the database
       saveOrderToDatabase();
@@ -1423,7 +1432,7 @@ const OrderCardForm: React.FC = () => {
       }
       return true;
     } catch (error) {
-      console.error('Error validating reference number:', error);
+      logError('Error validating reference number:', error);
       setNotification({
         message: 'Error validating reference number. Please try again.',
         type: 'error',
@@ -1435,11 +1444,11 @@ const OrderCardForm: React.FC = () => {
 
   const saveOrderToDatabase = async () => {
     try {
-      console.log('Starting to save order to database...');
+      logInfo('Starting to save order to database', { prescriptionNo: formData.prescriptionNo, referenceNo: formData.referenceNo });
       
       // 1. Generate a prescription number if it doesn't exist
       if (!formData.prescriptionNo) {
-        console.log('Generating new prescription number...');
+        logInfo('Generating new prescription number');
         const newPrescriptionNo = await generateUniquePrescriptionNumber();
         setFormData(prev => ({
           ...prev,
@@ -1453,15 +1462,15 @@ const OrderCardForm: React.FC = () => {
       
       // 2. Validate reference number if it's different from prescription number
       if (formData.referenceNo && formData.referenceNo !== formData.prescriptionNo) {
-        console.log('Validating reference number...');
+        logInfo('Validating reference number');
         const isValid = await validateReferenceNumber(formData.referenceNo, formData.id);
         if (!isValid) {
-          console.log('Reference number validation failed');
+          logInfo('Reference number validation failed');
           return;
         }
       } else if (!formData.referenceNo) {
         // If reference number is empty, set it to match prescription number
-        console.log('Setting reference number to match prescription number');
+        logInfo('Setting reference number to match prescription number');
         setFormData(prev => ({
           ...prev,
           referenceNo: prev.prescriptionNo
@@ -1470,7 +1479,7 @@ const OrderCardForm: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 0));
       }
       
-      console.log('All validations passed, proceeding with save...');
+      logInfo('All validations passed, proceeding with save');
       
       // Validate required fields
       if (!formData.name || formData.name.trim() === '') {
@@ -1517,7 +1526,7 @@ const OrderCardForm: React.FC = () => {
       let isExistingRecord = false;
       
       try {
-        console.log('Checking for existing prescription with multiple identifiers');
+        logInfo('Checking for existing prescription with multiple identifiers');
         
         // Try to find by customer code first if available
         if (formData.customerCode && formData.customerCode !== '') {
@@ -1530,7 +1539,7 @@ const OrderCardForm: React.FC = () => {
           if (!customerCodeError && prescByCustomerCode) {
             prescriptionId = prescByCustomerCode.id;
             isExistingRecord = true;
-            console.log('Found existing prescription by customer code:', prescByCustomerCode.id);
+            logInfo('Found existing prescription by customer code', { id: prescByCustomerCode.id });
           }
         }
         
@@ -1546,7 +1555,7 @@ const OrderCardForm: React.FC = () => {
             // Found by prescription number
             prescriptionId = prescByNumber.id;
             isExistingRecord = true;
-            console.log('Found existing prescription by prescription number:', prescByNumber.id);
+            logInfo('Found existing prescription by prescription number', { id: prescByNumber.id });
           }
         }
         
@@ -1562,7 +1571,7 @@ const OrderCardForm: React.FC = () => {
             // Found by reference number
             prescriptionId = prescByRef.id;
             isExistingRecord = true;
-            console.log('Found existing prescription by reference number:', prescByRef.id);
+            logInfo('Found existing prescription by reference number', { id: prescByRef.id });
           }
         }
         
@@ -1578,13 +1587,13 @@ const OrderCardForm: React.FC = () => {
             // Found by mobile number
             prescriptionId = prescByMobile.id;
             isExistingRecord = true;
-            console.log('Found existing prescription by mobile number:', prescByMobile.id);
+            logInfo('Found existing prescription by mobile number', { id: prescByMobile.id });
           }
         }
         
         // If no existing record was found, create a new one
         if (!isExistingRecord) {
-          console.log('No existing prescription found, creating new one');
+          logInfo('No existing prescription found, creating new one');
           
           // Ensure we have valid prescription and reference numbers
           const prescriptionNoToSave = formData.prescriptionNo || await generateUniquePrescriptionNumber();
@@ -1602,7 +1611,7 @@ const OrderCardForm: React.FC = () => {
               
             if (!findError && existingPrescription) {
               existingOrderCardPrescription = existingPrescription;
-              console.log('Found existing OrderCard prescription with same mobile number:', existingPrescription.id);
+              logInfo('Found existing OrderCard prescription with same mobile number', { id: existingPrescription.id });
             }
           }
           
@@ -1610,7 +1619,7 @@ const OrderCardForm: React.FC = () => {
             // Use existing OrderCard prescription
             prescriptionId = existingOrderCardPrescription.id;
             isExistingRecord = true;
-            console.log('Reusing existing OrderCard prescription ID:', prescriptionId);
+            logInfo('Reusing existing OrderCard prescription ID', { id: prescriptionId });
             
             // Update the existing record with new data
             const { error: updateError } = await supabase
@@ -1624,10 +1633,10 @@ const OrderCardForm: React.FC = () => {
               .eq('id', prescriptionId);
               
             if (updateError) {
-              console.error('Error updating existing prescription:', updateError);
+              logError('Error updating existing prescription:', updateError);
               throw new Error(`Failed to update prescription: ${updateError.message}`);
             }
-            console.log('Updated existing prescription with new data');
+            logInfo('Updated existing prescription with new data');
           } else {
             // Create a new prescription with all available fields and source='OrderCard'
             const { data: newPrescription, error: createError } = await supabase
@@ -1659,11 +1668,11 @@ const OrderCardForm: React.FC = () => {
             }
             
             prescriptionId = newPrescription.id;
-            console.log('Created new prescription with OrderCard source:', newPrescription);
+            logInfo('Created new prescription with OrderCard source', { id: newPrescription.id });
           }
         } else {
           // If we found an existing record, make sure we update all relevant fields
-          console.log('Updating existing prescription:', prescriptionId);
+          logInfo('Updating existing prescription', { id: prescriptionId });
           
           // Update the prescription with current form data to ensure all fields are current
           const updateData: Record<string, any> = {};
@@ -1712,14 +1721,14 @@ const OrderCardForm: React.FC = () => {
               });
               
             if (updateError) {
-              console.error('Error updating prescription:', updateError);
+              logError('Error updating prescription:', updateError);
             } else {
-              console.log('Successfully updated prescription data');
+              logInfo('Successfully updated prescription data');
             }
           }
         }
       } catch (lookupError) {
-        console.error('Exception during prescription handling:', lookupError);
+        logError('Exception during prescription handling:', lookupError);
         setNotification({
           message: `Error with prescription: ${lookupError instanceof Error ? lookupError.message : 'Unknown error'}`,
           type: 'error',
@@ -1739,7 +1748,7 @@ const OrderCardForm: React.FC = () => {
       let orderCheckError = null;
       
       try {
-        console.log('Looking for existing order with prescriptionId:', prescriptionId);
+        logInfo('Looking for existing order with prescriptionId', { id: prescriptionId });
         const { data: orderByPrescription, error: prescOrderError } = await supabase
           .from('orders')
           .select('id')
@@ -1748,7 +1757,7 @@ const OrderCardForm: React.FC = () => {
         
         if (!prescOrderError && orderByPrescription) {
           existingOrder = orderByPrescription;
-          console.log('Found existing order by prescriptionId:', existingOrder);
+          logInfo('Found existing order by prescriptionId', { id: existingOrder.id });
         } else if (formData.referenceNo) {
           // If not found by prescription ID, try by order number/reference
           const { data: orderByNumber, error: orderNumError } = await supabase
@@ -1759,17 +1768,17 @@ const OrderCardForm: React.FC = () => {
             
           if (!orderNumError && orderByNumber) {
             existingOrder = orderByNumber;
-            console.log('Found existing order by orderNumber:', existingOrder);
+            logInfo('Found existing order by orderNumber', { id: existingOrder.id });
           } else {
             orderCheckError = orderNumError;
           }
         }
       } catch (lookupErr) {
-        console.error('Error looking up existing order:', lookupErr);
+        logError('Error looking up existing order:', lookupErr);
         orderCheckError = { message: lookupErr instanceof Error ? lookupErr.message : 'Unknown error' };
       }
         
-      console.log('Existing order check results:', existingOrder, orderCheckError ? `Error: ${orderCheckError.message}` : '');
+      logInfo('Existing order check results', { existingOrder, orderCheckError: orderCheckError ? `Error: ${orderCheckError.message}` : '' });
       
       // Prepare order data
       const orderData = {
@@ -1849,12 +1858,12 @@ const OrderCardForm: React.FC = () => {
         }
       };
       
-      console.log('Prepared order data:', orderData);
+      logInfo('Prepared order data', { orderData });
       
       let result;
       if (existingOrder) {
         // If order exists, update it instead of recreating it
-        console.log('Updating existing order:', existingOrder.id);
+        logInfo('Updating existing order', { id: existingOrder.id });
         
         try {
           // 1. Update the main order record using upsert to avoid CORS PATCH issues
@@ -1876,7 +1885,7 @@ const OrderCardForm: React.FC = () => {
             .eq('id', existingOrder.id);
             
           if (orderUpdateError) {
-            console.error('Error updating order:', orderUpdateError);
+            logError('Error updating order:', orderUpdateError);
             throw new Error(`Failed to update order: ${orderUpdateError.message}`);
           }
           
@@ -1887,10 +1896,10 @@ const OrderCardForm: React.FC = () => {
             .eq('order_id', existingOrder.id);
             
           // Log the deletion for debugging
-          console.log('Deleted order items for order:', existingOrder.id);
+          logInfo('Deleted order items for order', { id: existingOrder.id });
             
           if (itemsDeleteError) {
-            console.error('Error deleting order items:', itemsDeleteError);
+            logError('Error deleting order items:', itemsDeleteError);
             throw new Error(`Failed to delete order items: ${itemsDeleteError.message}`);
           }
           
@@ -1920,7 +1929,7 @@ const OrderCardForm: React.FC = () => {
             .insert(orderItems);
             
           if (itemsInsertError) {
-            console.error('Error inserting order items:', itemsInsertError);
+            logError('Error inserting order items:', itemsInsertError);
             throw new Error(`Failed to insert order items: ${itemsInsertError.message}`);
           }
           
@@ -1932,7 +1941,7 @@ const OrderCardForm: React.FC = () => {
             .maybeSingle();
             
           if (paymentCheckError) {
-            console.error('Error checking payment record:', paymentCheckError);
+            logError('Error checking payment record:', paymentCheckError);
             throw new Error(`Failed to check payment record: ${paymentCheckError.message}`);
           }
           
@@ -1960,7 +1969,7 @@ const OrderCardForm: React.FC = () => {
           const calculatedBalance = Math.max(0, finalAmount - calculatedTotalAdvance);
           
           // Log the exact values being sent to the database and expected calculation results
-          console.log('PAYMENT VALUES BEING SAVED TO DATABASE:', {
+          logDebug('PAYMENT VALUES BEING SAVED TO DATABASE:', {
             // Values being sent to database
             sentValues: {
               advanceCash,
@@ -2010,7 +2019,7 @@ const OrderCardForm: React.FC = () => {
           };
           
           // Use upsert for payment records to avoid CORS PATCH issues
-          console.log(existingPayment ? 'Updating existing payment record' : 'Creating new payment record for existing order');
+          logInfo(existingPayment ? 'Updating existing payment record' : 'Creating new payment record for existing order');
           
           // If payment exists, include its ID to make this an update operation
           const paymentDataWithId = existingPayment 
@@ -2022,14 +2031,14 @@ const OrderCardForm: React.FC = () => {
             .from('order_payments')
             .upsert(paymentDataWithId);
             
-          console.log('Payment upsert result:', paymentUpdateResult);
+          logInfo('Payment upsert result', { paymentUpdateResult });
           
           if (paymentUpdateResult.error) {
-            console.error('Error updating/inserting payment:', paymentUpdateResult.error);
+            logError('Error updating/inserting payment:', paymentUpdateResult.error);
             throw new Error(`Failed to update payment: ${paymentUpdateResult.error.message}`);
           }
           
-          console.log('Payment update/insert successful. Verifying database values...');
+          logInfo('Payment update/insert successful. Verifying database values...');
           
           // Directly verify and fix the database values if needed
           try {
@@ -2042,13 +2051,13 @@ const OrderCardForm: React.FC = () => {
               
             if (fetchError) throw fetchError;
             
-            console.log('CURRENT DATABASE VALUES AFTER UPDATE:', currentPayment);
+            logInfo('CURRENT DATABASE VALUES AFTER UPDATE:', currentPayment);
             
             // Verify that total_advance (generated column) equals sum of individual advances
             const expectedTotalAdvance = advanceCash + advanceCardUpi + advanceOther;
             const expectedBalance = Math.max(0, finalAmount - expectedTotalAdvance);
             
-            console.log('VERIFICATION:', {
+            logInfo('VERIFICATION:', {
               expectedTotalAdvance,
               actualTotalAdvance: currentPayment.total_advance,
               expectedBalance,
@@ -2063,11 +2072,11 @@ const OrderCardForm: React.FC = () => {
             if (Math.abs(expectedTotalAdvance - currentPayment.total_advance) >= 0.01 || 
                 Math.abs(expectedBalance - currentPayment.balance) >= 0.01) {
               
-              console.log('Mismatch detected. Attempting direct SQL update...');
+              logInfo('Mismatch detected. Attempting direct SQL update...');
               
               // As a fallback, try to update via a direct upsert with only the critical fields
               // This avoids CORS issues with RPC calls that might use PATCH
-              console.log('Attempting direct upsert with critical payment fields...');
+              logInfo('Attempting direct upsert with critical payment fields...');
               
               try {
                 // First, get full current payment data
@@ -2094,29 +2103,29 @@ const OrderCardForm: React.FC = () => {
                     .upsert(criticalUpdate);
                     
                   if (upsertError) {
-                    console.error('Payment correction upsert error:', upsertError instanceof Error ? upsertError.message : 'Unknown error');
+                    logError('Payment correction upsert error:', upsertError instanceof Error ? upsertError.message : 'Unknown error');
                   } else {
-                    console.log('Payment correction successful:', updateResult);
+                    logInfo('Payment correction successful:', updateResult);
                   }
                 } else {
-                  console.error('Could not find payment record for correction');
+                  logError('Could not find payment record for correction');
                 }
               } catch (correctionError) {
-                console.error('Error during payment correction:', correctionError instanceof Error ? correctionError.message : 'Unknown error');
+                logError('Error during payment correction:', correctionError instanceof Error ? correctionError.message : 'Unknown error');
               }
             }
           } catch (verificationError) {
-            console.error('Error during verification:', verificationError);
+            logError('Error during verification:', verificationError);
           }
           
-          console.log('Successfully updated order and related records');
+          logInfo('Successfully updated order and related records');
           result = { 
             success: true, 
             message: 'Order updated successfully', 
             orderId: existingOrder.id 
           };
         } catch (updateError) {
-          console.error('Error during order update process:', updateError);
+          logError('Error during order update process:', updateError);
           result = { 
             success: false, 
             message: updateError instanceof Error ? updateError.message : 'Unknown error during update' 
@@ -2124,25 +2133,17 @@ const OrderCardForm: React.FC = () => {
         }
       } else {
         // If no existing order, create a new one
-        console.log('Creating new order');
+        logInfo('Creating new order');
         result = await orderService.saveOrder(orderData);
       }
       
       if (result && result.success) {
-        setNotification({
-          message: `Order saved successfully! Order ID: ${result.orderId}`,
-          type: 'success',
-          visible: true
-        });
+        logInfo('Order saved successfully', { orderId: result.orderId, prescriptionNo: formData.prescriptionNo });
       } else {
-        setNotification({
-          message: `Error: ${result && result.message ? result.message : 'Unknown error'}`,
-          type: 'error',
-          visible: true
-        });
+        logError('Order save failed', result?.message);
       }
     } catch (error) {
-      console.error('Error in saveOrderToDatabase:', error);
+      logError('Error in saveOrderToDatabase:', error);
       setNotification({
         message: `An unexpected error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error',
@@ -2204,7 +2205,7 @@ const OrderCardForm: React.FC = () => {
       ? (totalWithTax * discountValue) / 100
       : Math.min(discountValue, totalWithTax);
     
-    console.log('Discount calculation:', {
+    logDebug('Discount calculation:', {
       totalBaseAmount,
       totalTaxAmount,
       totalWithTax,
@@ -2273,7 +2274,7 @@ const OrderCardForm: React.FC = () => {
 
       if (baseTotal === 0) return prev; // Prevent changes if item amount is 0
       
-      console.log('Item discount calculation:', {
+      logDebug('Item discount calculation:', {
         item, baseTotal, taxAmount, itemTotalWithTax, numericValue, type
       });
 
@@ -2336,7 +2337,7 @@ const OrderCardForm: React.FC = () => {
       // Balance = finalAmount - totalAdvance
       const balance = Math.max(0, finalAmount - totalAdvance);
       
-      console.log('Updated payment calculation:', {
+      logDebug('Updated payment calculation:', {
         baseAmount, taxTotal, discountTotal, paymentEstimate, finalAmount, totalAdvance, balance
       });
 

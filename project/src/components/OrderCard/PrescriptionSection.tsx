@@ -11,6 +11,7 @@ import {
   calculateSphericalEquivalent,
   validatePrescriptionData
 } from '../../utils/prescriptionUtils';
+import { logError } from '../../utils/logger';
 
 interface PrescriptionSectionProps {
   formData: { 
@@ -285,8 +286,7 @@ const PrescriptionSection: React.FC<PrescriptionSectionProps> = ({
     const { value, name } = e.target;
     
     if (!name) {
-      console.error('[handleVnChange] Missing name on event target:', e.target, e);
-      console.trace();
+      logError('[handleVnChange] Missing name on event target', { target: e.target, event: e });
       return;
     }
 

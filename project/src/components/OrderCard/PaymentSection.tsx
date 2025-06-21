@@ -1,6 +1,7 @@
 import React from 'react';
 import Input from '../ui/Input';
 import { PrescriptionFormData } from '../types';
+import { logDebug } from '../../utils/logger';
 
 interface PaymentSectionProps {
   formData: PrescriptionFormData;
@@ -57,7 +58,7 @@ const PaymentSection: React.FC<PaymentSectionProps> = ({
   const displayBalance = isExistingDatabaseRecord ? formData.balance : calculatedBalance;
   
   // Enhanced debugging to show clear decision paths
-  console.log('PaymentSection - DEBUG INFO:', {
+  logDebug('PaymentSection - DEBUG INFO', {
     // Source of data
     sourceType: isExistingDatabaseRecord ? 'DATABASE VALUES' : 'CALCULATED VALUES',
     
@@ -151,7 +152,7 @@ const PaymentSection: React.FC<PaymentSectionProps> = ({
           value={formData.advanceOther === '0.00' ? '' : formData.advanceOther}
           name="advanceOther"
           onChange={e => {
-            console.log('Advance Other changed:', e.target.value);
+            logDebug('Advance Other changed', { value: e.target.value });
             handleNumericInputChange(e);
           }}
           type="number"

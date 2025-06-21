@@ -6,6 +6,7 @@ import Card from '../ui/Card';
 import Input from '../ui/Input';
 import { supabase } from '../../Services/supabaseService';
 import { prescriptionService } from '../../Services/supabaseService';
+import { logDebug, logError, logWarn, logInfo } from '../../utils/logger';
 
 // Interface for search suggestions based on API response
 interface SearchSuggestion extends PrescriptionData {
@@ -122,10 +123,10 @@ const PrescriptionPage: React.FC = () => {
           default: return; // Don't search for other fields
         }
 
-        console.log(`[PrescriptionPage] Searching for ${column} containing: ${query}`);
+        logDebug(`[PrescriptionPage] Searching for ${column} containing: ${query}`);
         
         // Simplify query to match the pattern used in OrderCardForm
-        console.log(`[PrescriptionPage] Executing query for ${column}=${query}`);
+        logDebug(`[PrescriptionPage] Executing query for ${column}=${query}`);
         
         // Create a simpler selection string to avoid formatting issues
         const selectString = '*,eye_prescriptions(id,prescription_id,eye_type,vision_type,sph,cyl,ax,add_power,vn,rpd,lpd),prescription_remarks(*)'; 
@@ -139,7 +140,7 @@ const PrescriptionPage: React.FC = () => {
           
         // If no exact matches, try partial match for name/mobile
         if ((!data || data.length === 0) && (column === 'name' || column === 'mobile_no')) {
-          console.log(`[PrescriptionPage] No exact matches, trying partial match for: ${query}`);
+          logDebug(`[PrescriptionPage] No exact matches, trying partial match for: ${query}`);
           const result = await supabase
             .from('prescriptions')
             .select(selectString)
@@ -151,7 +152,7 @@ const PrescriptionPage: React.FC = () => {
         }
           
         if (error) {
-          console.error('[PrescriptionPage] Supabase search error:', error);
+          logError('[PrescriptionPage] Supabase search error:', error);
           setToastMessage(`Search failed: ${error.message}`);
           setToastType('error');
           setShowToast(true);
@@ -160,25 +161,25 @@ const PrescriptionPage: React.FC = () => {
           return;
         }
         
-        console.log('[PrescriptionPage] Raw search results from Supabase:', JSON.stringify(data, null, 2));
+        logDebug('[PrescriptionPage] Raw search results from Supabase:', JSON.stringify(data, null, 2));
 
         if (!data || data.length === 0) {
-          console.log('[PrescriptionPage] No search results found');
+          logDebug('[PrescriptionPage] No search results found');
           setSuggestions([]);
           setShowSuggestions(false);
           return;
         }
           
-        console.log('[PrescriptionPage] Search results:', data);
+        logDebug('[PrescriptionPage] Search results:', data);
       
         // Transformation of database results to match your interface including eye prescriptions
         const transformedData: SearchSuggestion[] = data.map((item: any) => {
-          console.log('[PrescriptionPage] Transforming item:', item);
+          logDebug('[PrescriptionPage] Transforming item:', item);
           // Check if eye_prescriptions and prescription_remarks arrays exist
           const eyePrescriptions = item.eye_prescriptions || [];
           const prescriptionRemarks = item.prescription_remarks || [];
 
-          console.log('[PrescriptionPage] Raw remarks data for transformation:', prescriptionRemarks);
+          logDebug('[PrescriptionPage] Raw remarks data for transformation:', prescriptionRemarks);
 
           // Find DV and NV for both eyes from the fetched eye_prescriptions
           const rightDv = eyePrescriptions.find((ep: any) => ep.eye_type === 'right' && ep.vision_type === 'dv');
@@ -191,7 +192,7 @@ const PrescriptionPage: React.FC = () => {
             ? prescriptionRemarks[0] 
             : {}; // Default to empty object if no remarks
 
-          console.log('[PrescriptionPage] Processed remarks data for mapping:', remarksData);
+          logDebug('[PrescriptionPage] Processed remarks data for mapping:', remarksData);
 
           const transformedItem: SearchSuggestion = {
             id: item.id,
@@ -267,15 +268,15 @@ const PrescriptionPage: React.FC = () => {
             balanceLens: item.balance_lens || false,
           };
 
-          console.log('[PrescriptionPage] Transformed item before returning:', transformedItem);
+          logDebug('[PrescriptionPage] Transformed item before returning:', transformedItem);
           return transformedItem;
         });
 
-        console.log('[PrescriptionPage] Final transformed suggestions:', transformedData);
+        logDebug('[PrescriptionPage] Final transformed suggestions:', transformedData);
         setSuggestions(transformedData);
         setShowSuggestions(transformedData.length > 0);
       } catch (error) {
-        console.error('[PrescriptionPage] Error during search and transformation:', error);
+        logError('[PrescriptionPage] Error during search and transformation:', error);
         setToastMessage(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
         setToastType('error');
         setShowToast(true);
@@ -295,7 +296,7 @@ const PrescriptionPage: React.FC = () => {
 
   // Handle selection of a search suggestion
   const handleSelectSuggestion = async (suggestion: SearchSuggestion) => {
-    console.log('[PrescriptionPage] Selected suggestion raw data:', suggestion);
+    logDebug('[PrescriptionPage] Selected suggestion raw data:', suggestion);
     // Fetch the full prescription data by ID when a suggestion is selected
     // This ensures we have all related data (eye_prescriptions, remarks, etc.)
     try {
@@ -303,18 +304,18 @@ const PrescriptionPage: React.FC = () => {
       // calling getPrescription here ensures we have the most complete and consistently structured data
       const fullPrescriptionData = await prescriptionService.getPrescription(suggestion.id);
       
-      console.log('[PrescriptionPage] Fetched full prescription data:', fullPrescriptionData);
+      logDebug('[PrescriptionPage] Fetched full prescription data:', fullPrescriptionData);
 
       if (fullPrescriptionData) {
         // Use the fetched full data to populate the form
         setFormData(fullPrescriptionData);
-        console.log('[PrescriptionPage] Updating form with initialData from full fetch:', fullPrescriptionData);
+        logDebug('[PrescriptionPage] Updating form with initialData from full fetch:', fullPrescriptionData);
       } else {
-        console.warn('[PrescriptionPage] Failed to fetch full prescription data for ID:', suggestion.id);
+        logWarn('[PrescriptionPage] Failed to fetch full prescription data for ID:', suggestion.id);
         // Fallback to populating form with basic suggestion data if full fetch fails
         // remarks mapping is already handled in the searchPrescriptions transformation
         setFormData(suggestion);
-        console.log('[PrescriptionPage] Updating form with initialData from suggestion fallback:', suggestion);
+        logDebug('[PrescriptionPage] Updating form with initialData from suggestion fallback:', suggestion);
         // Optionally show an error message
         setToastMessage('Could not load full prescription details.');
         setToastType('error');
@@ -322,11 +323,11 @@ const PrescriptionPage: React.FC = () => {
       }
 
     } catch (error) {
-      console.error('[PrescriptionPage] Error fetching full prescription data:', error);
+      logError('[PrescriptionPage] Error fetching full prescription data:', error);
       // Fallback to populating form with basic suggestion data if fetch fails
       // remarks mapping is already handled in the searchPrescriptions transformation
       setFormData(suggestion);
-      console.log('[PrescriptionPage] Updating form with initialData from suggestion fallback due to error:', suggestion);
+      logDebug('[PrescriptionPage] Updating form with initialData from suggestion fallback due to error:', suggestion);
       // Show an error message
       setToastMessage(`Error loading prescription details: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setToastType('error');
@@ -368,11 +369,11 @@ const PrescriptionPage: React.FC = () => {
   };
 
   const handleSubmit = async (data: PrescriptionData) => {
-    console.log('PrescriptionPage: handleSubmit triggered', data);
+    logDebug('PrescriptionPage: handleSubmit triggered', data);
     
     // Check if this is an update (data has an ID) or a new prescription
     const isUpdate = !!data.id;
-    console.log(`Performing ${isUpdate ? 'UPDATE' : 'CREATE'} operation for prescription`, {
+    logDebug(`Performing ${isUpdate ? 'UPDATE' : 'CREATE'} operation for prescription`, {
       id: data.id,
       prescriptionNo: data.prescriptionNo
     });

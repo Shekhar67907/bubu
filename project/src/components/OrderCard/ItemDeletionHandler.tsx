@@ -1,6 +1,7 @@
 import React from 'react';
 import { customerHistoryService } from '../../Services/customerHistoryService';
 import { PrescriptionFormData, SelectedItem } from '../types';
+import { logDebug, logError } from '../../utils/logger';
 
 interface ItemDeletionHandlerProps {
   formData: PrescriptionFormData;
@@ -19,7 +20,7 @@ export const useItemDeletionHandler = ({
     itemIndex: number
   ): Promise<boolean> => {
     try {
-      console.log('Processing item deletion:', { deletedItem, itemIndex, formData });
+      logDebug('Processing item deletion', { deletedItem, itemIndex, formData });
 
       // Prepare customer data
       const customerData = {
@@ -65,17 +66,17 @@ export const useItemDeletionHandler = ({
       );
 
       if (result.success) {
-        console.log('Successfully tracked deleted item:', result.data);
+        logDebug('Successfully tracked deleted item', { data: result.data });
         onDeleteSuccess?.(result.message);
         return true;
       } else {
-        console.error('Failed to track deleted item:', result.message);
+        logError('Failed to track deleted item', { message: result.message });
         onDeleteError?.(result.message);
         return false;
       }
     } catch (error) {
       const errorMessage = `Failed to track deleted item: ${error instanceof Error ? error.message : 'Unknown error'}`;
-      console.error('Error in handleItemDeletion:', error);
+      logError('Error in handleItemDeletion', error);
       onDeleteError?.(errorMessage);
       return false;
     }

@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import type { DeletedItem, CustomerHistory } from '../components/CustomerHistory/types';
+import { logInfo, logError, logDebug, logWarn, logDev } from '../utils/logger';
 
 // Service-specific interfaces for data manipulation
 export interface ServiceDeletedItem {
@@ -107,7 +108,7 @@ class CustomerHistoryService {
     orderNo?: string
   ): Promise<{ success: boolean; message: string; data?: any }> {
     try {
-      console.log('Adding deleted item to customer history:', { customerData, deletedItem, orderNo });
+      logInfo('Adding deleted item to customer history:', { customerData, deletedItem, orderNo });
 
       // Prepare the deleted item with timestamp
       const itemWithTimestamp: ServiceDeletedItem = {
@@ -179,11 +180,11 @@ class CustomerHistoryService {
           .single();
 
         if (updateError) {
-          console.error('Error updating customer history:', updateError);
+          logError('Error updating customer history:', updateError);
           return { success: false, message: `Failed to update customer history: ${updateError.message}` };
         }
 
-        console.log('Successfully updated customer history:', updatedData);
+        logInfo('Successfully updated customer history:', updatedData);
         return { 
           success: true, 
           message: 'Item added to existing customer history', 
@@ -214,11 +215,11 @@ class CustomerHistoryService {
           .single();
 
         if (insertError) {
-          console.error('Error creating customer history:', insertError);
+          logError('Error creating customer history:', insertError);
           return { success: false, message: `Failed to create customer history: ${insertError.message}` };
         }
 
-        console.log('Successfully created new customer history:', newData);
+        logInfo('Successfully created new customer history:', newData);
         return { 
           success: true, 
           message: 'New customer history created with deleted item', 
@@ -226,7 +227,7 @@ class CustomerHistoryService {
         };
       }
     } catch (error) {
-      console.error('Unexpected error in addDeletedItemToHistory:', error);
+      logError('Unexpected error in addDeletedItemToHistory:', error);
       return { 
         success: false, 
         message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -249,7 +250,7 @@ class CustomerHistoryService {
         if (error.code === 'PGRST116') {
           return { success: true, data: undefined, message: 'No history found for this customer' };
         }
-        console.error('Error fetching customer history:', error);
+        logError('Error fetching customer history:', error);
         return { success: false, message: error.message };
       }
 
@@ -261,7 +262,7 @@ class CustomerHistoryService {
 
       return { success: true, data: customerHistory };
     } catch (error) {
-      console.error('Unexpected error in getCustomerHistory:', error);
+      logError('Unexpected error in getCustomerHistory:', error);
       return { 
         success: false, 
         message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -284,7 +285,7 @@ class CustomerHistoryService {
         if (error.code === 'PGRST116') {
           return { success: true, data: undefined, message: 'No history found for this mobile number' };
         }
-        console.error('Error fetching customer history by mobile:', error);
+        logError('Error fetching customer history by mobile:', error);
         return { success: false, message: error.message };
       }
 
@@ -296,7 +297,7 @@ class CustomerHistoryService {
 
       return { success: true, data: customerHistory };
     } catch (error) {
-      console.error('Unexpected error in getCustomerHistoryByMobile:', error);
+      logError('Unexpected error in getCustomerHistoryByMobile:', error);
       return { 
         success: false, 
         message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -317,7 +318,7 @@ class CustomerHistoryService {
         .order('updated_at', { ascending: false });
 
       if (error) {
-        console.error('Error searching customer history:', error);
+        logError('Error searching customer history:', error);
         return { success: false, message: error.message };
       }
 
@@ -329,7 +330,7 @@ class CustomerHistoryService {
 
       return { success: true, data: customerHistories };
     } catch (error) {
-      console.error('Unexpected error in searchCustomerHistory:', error);
+      logError('Unexpected error in searchCustomerHistory:', error);
       return { 
         success: false, 
         message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 
@@ -345,10 +346,10 @@ class CustomerHistoryService {
     value: string
   ): Promise<{ success: boolean; data?: CustomerHistory; message?: string }> {
     try {
-      console.log(`[searchCustomerHistoryByField] Searching by ${field}:`, value);
+      logInfo(`[searchCustomerHistoryByField] Searching by ${field}:`, value);
       
       if (!value.trim()) {
-        console.log('[searchCustomerHistoryByField] Empty search value provided');
+        logInfo('[searchCustomerHistoryByField] Empty search value provided');
         return { success: false, message: 'Search value cannot be empty' };
       }
       
@@ -358,7 +359,7 @@ class CustomerHistoryService {
       // First, try to find exact match in deleted_items array
       const searchQuery = `deleted_items.cs.[{"${searchField}":"${value}"}]`;
       
-      console.log('[searchCustomerHistoryByField] Constructed search query:', searchQuery);
+      logInfo('[searchCustomerHistoryByField] Constructed search query:', searchQuery);
       
       // Execute the query
       const { data: historyData, error: historyError } = await supabase
@@ -366,7 +367,7 @@ class CustomerHistoryService {
         .select('*')
         .or(searchQuery);
 
-      console.log('[searchCustomerHistoryByField] Search results from customer_history:', { 
+      logInfo('[searchCustomerHistoryByField] Search results from customer_history:', { 
         data: historyData ? 'Data received' : 'No data',
         error: historyError,
         count: historyData?.length || 0
@@ -400,7 +401,7 @@ class CustomerHistoryService {
           )
         } as CustomerHistory;
 
-        console.log('Returning filtered customer history:', customerHistory);
+        logInfo('Returning filtered customer history:', customerHistory);
         return {
           success: true,
           data: customerHistory
@@ -489,7 +490,7 @@ class CustomerHistoryService {
         data: existingCustomerHistory
       };
     } catch (error) {
-      console.error(`Error searching customer history by ${field}:`, error);
+      logError(`Error searching customer history by ${field}:`, error);
       return {
         success: false,
         message: error instanceof Error ? error.message : `Failed to search by ${field}`
@@ -514,7 +515,7 @@ class CustomerHistoryService {
         .range(offset, offset + limit - 1);
 
       if (error) {
-        console.error('Error fetching all customer history:', error);
+        logError('Error fetching all customer history:', error);
         return { success: false, message: error.message };
       }
 
@@ -526,7 +527,7 @@ class CustomerHistoryService {
 
       return { success: true, data: customerHistories, count: count || 0 };
     } catch (error) {
-      console.error('Unexpected error in getAllCustomerHistory:', error);
+      logError('Unexpected error in getAllCustomerHistory:', error);
       return { 
         success: false, 
         message: `Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}` 

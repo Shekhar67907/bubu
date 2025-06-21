@@ -1,6 +1,7 @@
 // src/services/supabaseService.ts
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrescriptionData } from '../types';
+import { logInfo, logError, logDebug, logWarn, logDev } from '../utils/logger';
 
 // Define TypeScript types for the database schema
 type Database = {
@@ -48,7 +49,7 @@ type SupabaseClientType = SupabaseClient<Database>;
 let supabaseInstance: SupabaseClientType | null = null;
 
 // Debug environment variables
-console.log('Environment variables:', {
+logInfo('Environment variables:', {
   VITE_SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL,
   VITE_SUPABASE_ANON_KEY: import.meta.env.VITE_SUPABASE_ANON_KEY ? 'Present' : 'Missing'
 });
@@ -65,7 +66,7 @@ const initializeSupabase = (): SupabaseClientType => {
 
   if (!supabaseUrl || !supabaseAnonKey) {
     const errorMsg = 'Missing required Supabase environment variables. Please check your .env file.';
-    console.error(errorMsg, {
+    logError(errorMsg, {
       url: supabaseUrl ? '✓' : '✗',
       key: supabaseAnonKey ? '✓' : '✗'
     });
@@ -92,7 +93,7 @@ const initializeSupabase = (): SupabaseClientType => {
 
     return supabaseInstance;
   } catch (error) {
-    console.error('Failed to initialize Supabase client:', error);
+    logError('Failed to initialize Supabase client:', error);
     throw new Error('Failed to initialize Supabase client');
   }
 };
@@ -103,16 +104,16 @@ const supabase = initializeSupabase();
 // Test connection method
 export const testConnection = async () => {
   try {
-    console.log('Testing Supabase connection...');
+    logInfo('Testing Supabase connection...');
     const { error } = await supabase.from('prescriptions').select('count').limit(1);
     if (error) {
-      console.error('Supabase connection test error:', error);
+      logError('Supabase connection test error:', error);
       throw error;
     }
-    console.log('Supabase connection successful');
+    logInfo('Supabase connection successful');
     return { success: true, message: 'Connected to Supabase successfully' };
   } catch (error) {
-    console.error('Connection test failed:', error);
+    logError('Connection test failed:', error);
     return { 
       success: false, 
       error: error instanceof Error ? error.message : 'Failed to connect to Supabase' 
@@ -185,17 +186,17 @@ export interface DatabaseRemarks {
 
 // Helper function to convert database format to PrescriptionData format
 function mapDatabaseToPrescriptionData(dbData: any): PrescriptionData | null {
-  console.log('mapDatabaseToPrescriptionData - Raw dbData:', JSON.parse(JSON.stringify(dbData)));
+  logInfo('mapDatabaseToPrescriptionData - Raw dbData:', JSON.parse(JSON.stringify(dbData)));
   
   if (!dbData || !dbData.prescription) {
-    console.log('No prescription data found in dbData');
+    logInfo('No prescription data found in dbData');
     return null;
   }
 
   const prescription = dbData.prescription;
   const eyePrescriptions = dbData.eyePrescriptions || [];
   
-  console.log('Raw remarks data from db:', {
+  logInfo('Raw remarks data from db:', {
     rawRemarks: dbData.remarks,
     isArray: Array.isArray(dbData.remarks),
     length: Array.isArray(dbData.remarks) ? dbData.remarks.length : 'N/A'
@@ -216,7 +217,7 @@ function mapDatabaseToPrescriptionData(dbData: any): PrescriptionData | null {
 
   // Handle different formats of remarks data
   if (Array.isArray(dbData.remarks) && dbData.remarks.length > 0) {
-    console.log('Processing remarks array:', dbData.remarks);
+    logInfo('Processing remarks array:', dbData.remarks);
     // Take the first item if it's an array
     const remarkData = dbData.remarks[0];
     remarks = {
@@ -231,7 +232,7 @@ function mapDatabaseToPrescriptionData(dbData: any): PrescriptionData | null {
       underCorrected: Boolean(remarkData.under_corrected)
     };
   } else if (dbData.remarks && typeof dbData.remarks === 'object') {
-    console.log('Processing remarks object:', dbData.remarks);
+    logInfo('Processing remarks object:', dbData.remarks);
     remarks = {
       forConstantUse: Boolean(dbData.remarks.for_constant_use),
       forDistanceVisionOnly: Boolean(dbData.remarks.for_distance_vision_only),
@@ -245,7 +246,7 @@ function mapDatabaseToPrescriptionData(dbData: any): PrescriptionData | null {
     };
   }
 
-  console.log('Processed remarks:', remarks);
+  logInfo('Processed remarks:', remarks);
 
   // Helper to find raw eye data
   const findRawEyeData = (eye: 'right' | 'left', type: 'dv' | 'nv') => {
@@ -339,7 +340,7 @@ class PrescriptionService {
   // Auto-save prescription with all related data
   async autoSavePrescription(data: PrescriptionData, prescriptionId?: string) {
     try {
-      console.log('supabaseService: autoSavePrescription triggered', { data, prescriptionId });
+      logInfo('supabaseService: autoSavePrescription triggered', { data, prescriptionId });
       
       // Validate input data
       const validation = this.validatePrescriptionData(data);
@@ -473,16 +474,16 @@ class PrescriptionService {
 
       try {
         // Save or update remarks using the savePrescriptionRemarks method
-        console.log('Saving remarks for prescription:', prescriptionDataResult.id);
+        logInfo('Saving remarks for prescription:', prescriptionDataResult.id);
         
         if (data.remarks) {
           const savedRemarks = await this.savePrescriptionRemarks(data.remarks, prescriptionDataResult.id);
-          console.log('Successfully saved remarks:', savedRemarks);
+          logInfo('Successfully saved remarks:', savedRemarks);
         } else {
-          console.log('No remarks to save');
+          logInfo('No remarks to save');
         }
       } catch (error) {
-        console.error('Error in remarks processing:', error);
+        logError('Error in remarks processing:', error);
         throw new Error(`Remarks processing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
 
@@ -494,7 +495,7 @@ class PrescriptionService {
         }
       };
     } catch (error) {
-      console.error('Error auto-saving prescription:', error);
+      logError('Error auto-saving prescription:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Auto-save failed'
@@ -505,7 +506,7 @@ class PrescriptionService {
   // Save prescription remarks
   async savePrescriptionRemarks(remarks: any, prescriptionId: string) {
     try {
-      console.log('Saving prescription remarks:', { remarks, prescriptionId });
+      logInfo('Saving prescription remarks:', { remarks, prescriptionId });
       
       // Use the stored procedure to upsert remarks
       const { data, error } = await supabase.rpc('upsert_prescription_remarks', {
@@ -522,14 +523,14 @@ class PrescriptionService {
       });
       
       if (error) {
-        console.error('Error saving prescription remarks:', error);
+        logError('Error saving prescription remarks:', error);
         throw error;
       }
 
-      console.log('Successfully saved prescription remarks:', data);
+      logInfo('Successfully saved prescription remarks:', data);
       return data;
     } catch (error) {
-      console.error('Error in savePrescriptionRemarks:', error);
+      logError('Error in savePrescriptionRemarks:', error);
       throw error;
     }
   }
@@ -537,7 +538,7 @@ class PrescriptionService {
   // Get prescription by ID with all related data
   async getPrescription(prescriptionId: string): Promise<PrescriptionData | null> {
     try {
-      console.log(`[getPrescription] Fetching prescription with ID: ${prescriptionId}`);
+      logInfo(`[getPrescription] Fetching prescription with ID: ${prescriptionId}`);
       
       // First, get the base prescription data
       const { data: prescriptionData, error: prescriptionError } = await supabase
@@ -547,12 +548,12 @@ class PrescriptionService {
         .single();
 
       if (prescriptionError) {
-        console.error('[getPrescription] Error fetching prescription:', prescriptionError);
+        logError('[getPrescription] Error fetching prescription:', prescriptionError);
         return null;
       }
 
       if (!prescriptionData) {
-        console.log('[getPrescription] No prescription found with ID:', prescriptionId);
+        logInfo('[getPrescription] No prescription found with ID:', prescriptionId);
         return null;
       }
 
@@ -563,7 +564,7 @@ class PrescriptionService {
         .eq('prescription_id', prescriptionId);
 
       if (eyeError) {
-        console.error('[getPrescription] Error fetching eye prescriptions:', eyeError);
+        logError('[getPrescription] Error fetching eye prescriptions:', eyeError);
         // Continue even if there's an error with eye prescriptions
       }
 
@@ -574,11 +575,11 @@ class PrescriptionService {
         .eq('prescription_id', prescriptionId);
 
       if (remarksError) {
-        console.error('[getPrescription] Error fetching remarks:', remarksError);
+        logError('[getPrescription] Error fetching remarks:', remarksError);
         // Continue even if there's an error with remarks
       }
 
-      console.log('[getPrescription] Data fetched:', {
+      logInfo('[getPrescription] Data fetched:', {
         prescription: prescriptionData,
         eyePrescriptions: eyePrescriptions || [],
         remarks: remarksData || []
@@ -591,10 +592,10 @@ class PrescriptionService {
         remarks: Array.isArray(remarksData) && remarksData.length > 0 ? remarksData[0] : {}
       });
 
-      console.log('[getPrescription] Mapped result:', result);
+      logInfo('[getPrescription] Mapped result:', result);
       return result;
     } catch (error) {
-      console.error('[getPrescription] Error in getPrescription:', error);
+      logError('[getPrescription] Error in getPrescription:', error);
       return null;
     }
   }
@@ -602,7 +603,7 @@ class PrescriptionService {
   // Search prescriptions by number (Prescription No. or Reference No.)
   async searchPrescriptionsByNumber(searchQuery: string) {
     try {
-      console.log('[searchPrescriptionsByNumber] Starting search with query:', searchQuery);
+      logInfo('[searchPrescriptionsByNumber] Starting search with query:', searchQuery);
       
       // Escape special characters in the search query for LIKE pattern matching
       const escapedQuery = searchQuery.replace(/[_%]/g, '\$&');
@@ -620,14 +621,14 @@ class PrescriptionService {
         .limit(1); // Limit to 1 since prescription_no is unique
 
       if (error) {
-        console.error('[searchPrescriptionsByNumber] Supabase query error:', error);
+        logError('[searchPrescriptionsByNumber] Supabase query error:', error);
         throw error;
       }
 
-      console.log('[searchPrescriptionsByNumber] Raw data from Supabase:', JSON.stringify(data, null, 2));
+      logInfo('[searchPrescriptionsByNumber] Raw data from Supabase:', JSON.stringify(data, null, 2));
 
       if (data && data.length > 0) {
-        console.log('[searchPrescriptionsByNumber] Found prescription:', {
+        logInfo('[searchPrescriptionsByNumber] Found prescription:', {
           prescriptionNo: data[0].prescription_no,
           remarks: data[0].prescription_remarks
         });
@@ -650,7 +651,7 @@ class PrescriptionService {
               }]
         };
 
-        console.log('[searchPrescriptionsByNumber] Formatted prescription:', {
+        logInfo('[searchPrescriptionsByNumber] Formatted prescription:', {
           prescriptionNo: formattedPrescription.prescription_no,
           remarks: formattedPrescription.prescription_remarks
         });
@@ -661,18 +662,18 @@ class PrescriptionService {
           remarks: formattedPrescription.prescription_remarks?.[0] || {}
         });
 
-        console.log('[searchPrescriptionsByNumber] Final formatted data:', {
+        logInfo('[searchPrescriptionsByNumber] Final formatted data:', {
           prescriptionNo: formattedData?.prescriptionNo,
           remarks: formattedData?.remarks
         });
         
         return { success: true, data: formattedData };
       } else {
-        console.log('[searchPrescriptionsByNumber] No prescription found');
+        logInfo('[searchPrescriptionsByNumber] No prescription found');
         return { success: true, data: null, message: 'No prescription found' };
       }
     } catch (error) {
-      console.error('[searchPrescriptionsByNumber] Error:', error);
+      logError('[searchPrescriptionsByNumber] Error:', error);
       return { success: false, error: error instanceof Error ? error.message : 'Search failed' };
     }
   }
@@ -680,7 +681,7 @@ class PrescriptionService {
   // Search prescriptions
   async searchPrescriptions(searchQuery: string) {
     try {
-      console.log('[searchPrescriptions] Starting search with query:', searchQuery);
+      logInfo('[searchPrescriptions] Starting search with query:', searchQuery);
 
       const { data, error } = await supabase
         .from('prescriptions')
@@ -692,20 +693,20 @@ class PrescriptionService {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('[searchPrescriptions] Supabase query error:', error);
+        logError('[searchPrescriptions] Supabase query error:', error);
         throw error;
       }
 
-      console.log('[searchPrescriptions] Raw data from Supabase:', JSON.stringify(data, null, 2));
+      logInfo('[searchPrescriptions] Raw data from Supabase:', JSON.stringify(data, null, 2));
       
       if (!data) {
-        console.log('[searchPrescriptions] No data returned');
+        logInfo('[searchPrescriptions] No data returned');
         return [];
       }
       
       // Format the data to ensure prescription_remarks is always an array with at least one item
       const formattedData = data.map(prescription => {
-        console.log('[searchPrescriptions] Processing prescription:', {
+        logInfo('[searchPrescriptions] Processing prescription:', {
           prescriptionNo: prescription.prescription_no,
           remarks: prescription.prescription_remarks
         });
@@ -727,7 +728,7 @@ class PrescriptionService {
               }]
         };
 
-        console.log('[searchPrescriptions] Formatted prescription:', {
+        logInfo('[searchPrescriptions] Formatted prescription:', {
           prescriptionNo: formatted.prescription_no,
           remarks: formatted.prescription_remarks
         });
@@ -743,7 +744,7 @@ class PrescriptionService {
           remarks: prescription.prescription_remarks?.[0] || {}
         });
 
-        console.log('[searchPrescriptions] Mapped prescription:', {
+        logInfo('[searchPrescriptions] Mapped prescription:', {
           prescriptionNo: mapped?.prescriptionNo,
           remarks: mapped?.remarks
         });
@@ -753,7 +754,7 @@ class PrescriptionService {
 
       return result;
     } catch (error) {
-      console.error('[searchPrescriptions] Error:', error);
+      logError('[searchPrescriptions] Error:', error);
       return [];
     }
   }

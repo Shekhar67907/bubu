@@ -11,6 +11,7 @@ import {
   validateVnValue,
   formatVnValue
 } from '../../utils/prescriptionUtils';
+import { logError } from '../../utils/logger';
 
 interface LensPrescriptionSectionProps {
   formData: { 
@@ -219,7 +220,7 @@ const LensPrescriptionSection: React.FC<LensPrescriptionSectionProps> = ({
     const name = input.name;
 
     if (!name) {
-      console.error('[handleVnChange] Missing name on event target:', input, e);
+      logError('[handleVnChange] Missing name on event target', { input, event: e });
       console.trace();
       return;
     }

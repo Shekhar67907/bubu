@@ -5,6 +5,7 @@ import { Search, X, User, Phone, Mail } from 'lucide-react';
 import Card from '../ui/Card';
 import Select from '../ui/Select';
 import type { CustomerHistory, DeletedItem, SearchResult, SearchField } from './types';
+import { logDebug, logError } from '../../utils/logger';
 
 const CustomerHistoryViewer: React.FC = () => {
   const [searchField, setSearchField] = useState<SearchField>('name');
@@ -171,7 +172,7 @@ const CustomerHistoryViewer: React.FC = () => {
   }, [searchValue, searchField, mapToSearchResultAsync]);
 
   const handleCustomerSelect = useCallback((customer: SearchResult) => {
-    console.log('[handleCustomerSelect] Customer selected:', customer);
+    logDebug('[handleCustomerSelect] Customer selected', customer);
     setSelectedCustomer(customer);
     setShowResults(false);
     setSearchValue('');
@@ -202,7 +203,7 @@ const CustomerHistoryViewer: React.FC = () => {
           setShowResults(true);
           // Auto-select if only one result
           handleCustomerSelect(result);
-          console.log('[performSearch] Search results set:', [result]);
+          logDebug('[performSearch] Search results set', [result]);
         } else {
           setSearchResults([]);
           setSearchError(response.message || 'No results found');
@@ -218,7 +219,7 @@ const CustomerHistoryViewer: React.FC = () => {
           if (mappedResults.length === 1) {
             handleCustomerSelect(mappedResults[0]);
           }
-          console.log('[performSearch] Search results set:', mappedResults);
+          logDebug('[performSearch] Search results set', mappedResults);
           
           if (mappedResults.length === 0) {
             setSearchError('No results found');
@@ -230,7 +231,7 @@ const CustomerHistoryViewer: React.FC = () => {
         }
       }
     } catch (error) {
-      console.error('Search error:', error);
+      logError('Search error', error);
       setSearchError('Failed to perform search');
       setSearchResults([]);
       setShowResults(false);
@@ -250,20 +251,18 @@ const CustomerHistoryViewer: React.FC = () => {
 
   const loadCustomerHistory = useCallback(async (customerId: string) => {
     setLoading(true);
+    setCustomerHistory(null);
     setSearchError('');
-    
     try {
-      const result = await customerHistoryService.getCustomerHistory(customerId);
-      if (result.success && result.data) {
-        setCustomerHistory(result.data);
+      const response = await customerHistoryService.getCustomerHistory(customerId);
+      if (response.success && response.data) {
+        setCustomerHistory(response.data);
       } else {
-        setSearchError(result.message || 'Failed to load customer history');
-        setCustomerHistory(null);
+        setSearchError(response.message || 'No history found');
       }
     } catch (error) {
-      console.error('Error loading customer history:', error);
+      logError('Error loading customer history', error);
       setSearchError('Failed to load customer history');
-      setCustomerHistory(null);
     } finally {
       setLoading(false);
     }
@@ -301,13 +300,17 @@ const CustomerHistoryViewer: React.FC = () => {
     return Array.isArray(customerHistory.deleted_items) ? customerHistory.deleted_items : [];
   };
 
-  // Debug: Log current state
-  console.log('[Component State]', {
+  // Debug: log component state
+  logDebug('[Component State]', {
+    searchField,
     searchValue,
-    searchResults: searchResults.length,
+    isSearching,
+    searchResults,
     showResults,
-    searchError,
-    isSearching
+    selectedCustomer,
+    customerHistory,
+    loading,
+    searchError
   });
 
   return (
@@ -364,12 +367,12 @@ const CustomerHistoryViewer: React.FC = () => {
                   type="text"
                   value={searchValue}
                   onChange={(e) => {
-                    console.log('[Input onChange] Value:', e.target.value);
+                    logDebug('[Input onChange] Value', { value: e.target.value });
                     setSearchValue(e.target.value);
                     // Don't automatically show results here - let the useEffect handle it
                   }}
                   onFocus={() => {
-                    console.log('[Input onFocus] searchResults.length:', searchResults.length);
+                    logDebug('[Input onFocus] searchResults.length', { length: searchResults.length });
                     if (searchResults.length > 0 && searchValue.trim()) {
                       setShowResults(true);
                     }

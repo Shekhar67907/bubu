@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SelectedItem } from '../types';
 import { trackDeletedItem } from './ItemDeletionHandler';
 import ToastNotification from '../ui/ToastNotification';
+import { logWarn, logError } from '../../utils/logger';
 
 interface ItemsTableProps {
   items: SelectedItem[];
@@ -57,7 +58,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
         );
       } else {
         // If tracking failed, still allow deletion but show warning
-        console.warn('Failed to track deleted item:', trackingResult.message);
+        logWarn('Failed to track deleted item', { message: trackingResult.message });
         onDeleteItem(index);
         showNotification(
           `Item deleted but history tracking failed: ${trackingResult.message}`, 
@@ -65,7 +66,7 @@ const ItemsTable: React.FC<ItemsTableProps> = ({
         );
       }
     } catch (error) {
-      console.error('Error during item deletion:', error);
+      logError('Error during item deletion', error);
       // Still allow deletion even if history tracking fails
       onDeleteItem(index);
       showNotification(

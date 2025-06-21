@@ -2,6 +2,7 @@ import React from 'react';
 import { ContactLensItem } from './ContactLensTypes';
 import Input from '../ui/Input';
 import { supabase } from '../../Services/supabaseService';
+import { logDebug } from '../../utils/logger';
 
 interface ContactLensItemTableProps {
   items: ContactLensItem[];
@@ -45,7 +46,7 @@ const ContactLensItemTable: React.FC<ContactLensItemTableProps> = ({
       amount: formattedAmount
     };
     
-    console.log('Updated discount percent:', {
+    logDebug('Updated discount percent', {
       index,
       discountPercent,
       discountAmount: newItems[index].discountAmount,
@@ -93,7 +94,7 @@ const ContactLensItemTable: React.FC<ContactLensItemTableProps> = ({
       amount: formattedAmount
     };
     
-    console.log('Updated discount amount:', {
+    logDebug('Updated discount amount', {
       index,
       discountAmount: newItems[index].discountAmount,
       discountPercent: newItems[index].discountPercent,
@@ -186,7 +187,7 @@ const ContactLensItemTable: React.FC<ContactLensItemTableProps> = ({
                     value={item.discountPercent?.toString() || '0'}
                     onChange={(e) => handleDiscountPercentChange(index, e.target.value)}
                     className="w-16 h-7 text-xs text-center"
-                    onFocus={() => console.log('Focus on discount percent field:', item.discountPercent)}
+                    onFocus={undefined}
                   />
                 </td>
                 <td className="border px-2 py-1 text-xs">
@@ -197,7 +198,7 @@ const ContactLensItemTable: React.FC<ContactLensItemTableProps> = ({
                     value={item.discountAmount?.toString() || '0'}
                     onChange={(e) => handleDiscountAmountChange(index, e.target.value)}
                     className="w-16 h-7 text-xs text-center"
-                    onFocus={() => console.log('Focus on discount amount field:', item.discountAmount)}
+                    onFocus={undefined}
                   />
                 </td>
                 <td className="border px-2 py-1 text-xs">{item.amount ? parseFloat(item.amount.toString()).toFixed(2) : '0.00'}</td>

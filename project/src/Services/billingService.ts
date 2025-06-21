@@ -1,5 +1,6 @@
 import { supabase } from './supabaseService';
 import { contactLensService } from './contactLensService';
+import { logInfo, logError, logDebug, logWarn, logDev } from '../utils/logger';
 
 // Types for unified search results
 export interface UnifiedSearchResult {
@@ -172,12 +173,12 @@ interface BillingItem {
  * Unified search across orders, contact lenses, and prescriptions
  */
 export const unifiedSearch = async (searchTerm: string): Promise<UnifiedSearchResult[]> => {
-  console.log(`[unifiedSearch] Searching for: ${searchTerm}`);
+  logInfo(`[unifiedSearch] Searching for: ${searchTerm}`);
   
   try {
     const normalizedTerm = searchTerm.trim().toLowerCase();
     if (!normalizedTerm) {
-      console.warn('[unifiedSearch] Empty search term provided');
+      logWarn('[unifiedSearch] Empty search term provided');
       return [];
     }
 
@@ -188,7 +189,7 @@ export const unifiedSearch = async (searchTerm: string): Promise<UnifiedSearchRe
       searchPrescriptions(normalizedTerm)
     ]);
     
-    console.log(`[unifiedSearch] Search completed`, {
+    logInfo(`[unifiedSearch] Search completed`, {
       orders: orders.length,
       contactLenses: contactLenses.length,
       prescriptions: prescriptions.length
@@ -356,17 +357,17 @@ export const unifiedSearch = async (searchTerm: string): Promise<UnifiedSearchRe
       });
 
     // Log the results for debugging
-    console.log('Search results:', results);
+    logInfo('Search results:', results);
     return results;
   } catch (error) {
-    console.error('[unifiedSearch] Search failed:', error);
+    logError('[unifiedSearch] Search failed:', error);
     throw new Error('Search failed. Please try again.');
   }
 };
 
 // Helper function to search orders
 const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> => {
-  console.log(`[searchOrders] Searching orders for: ${searchTerm}`);
+  logInfo(`[searchOrders] Searching orders for: ${searchTerm}`);
   try {
     // Query 1: Search by order_no or bill_no directly on orders table
     const { data: ordersByNumber, error: orderNumberError } = await supabase
@@ -426,7 +427,7 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
     const error = orderNumberError || prescriptionError;
 
     if (error) {
-      console.error('[searchOrders] Error:', error);
+      logError('[searchOrders] Error:', error);
       return [];
     }
 
@@ -436,7 +437,7 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
     );
 
     if (!uniqueData || !Array.isArray(uniqueData)) {
-      console.warn('[searchOrders] No data returned or invalid format');
+      logWarn('[searchOrders] No data returned or invalid format');
       return [];
     }
 
@@ -461,14 +462,14 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
       originalData: order
     }));
   } catch (error) {
-    console.error('[searchOrders] Unexpected error:', error);
+    logError('[searchOrders] Unexpected error:', error);
     return [];
   }
 };
 
 // Helper function to search contact lenses
 const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchResult[]> => {
-  console.log(`[searchContactLenses] Searching contact lenses for: ${searchTerm}`);
+  logInfo(`[searchContactLenses] Searching contact lenses for: ${searchTerm}`);
   try {
     // First, find matching prescriptions
     const { data: prescriptions, error: prescriptionError } = await supabase
@@ -478,7 +479,7 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
       .limit(50);
 
     if (prescriptionError) {
-      console.error('[searchContactLenses] Error fetching prescriptions:', prescriptionError);
+      logError('[searchContactLenses] Error fetching prescriptions:', prescriptionError);
       return [];
     }
 
@@ -503,7 +504,7 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
       .order('created_at', { ascending: false });
 
     if (clError) {
-      console.error('[searchContactLenses] Error fetching contact lens prescriptions:', clError);
+      logError('[searchContactLenses] Error fetching contact lens prescriptions:', clError);
       return [];
     }
 
@@ -565,7 +566,7 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
               diameter: item.diameter
             };
           } catch (error) {
-            console.error('Error mapping contact lens item:', item, error);
+            logError('Error mapping contact lens item:', item, error);
             return null;
           }
         })
@@ -599,14 +600,14 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
       };
     });
   } catch (error) {
-    console.error('[searchContactLenses] Unexpected error:', error);
+    logError('[searchContactLenses] Unexpected error:', error);
     return [];
   }
 };
 
 // Helper function to search prescriptions
 const searchPrescriptions = async (searchTerm: string): Promise<UnifiedSearchResult[]> => {
-  console.log(`[searchPrescriptions] Searching prescriptions for: ${searchTerm}`);
+  logInfo(`[searchPrescriptions] Searching prescriptions for: ${searchTerm}`);
   try {
     // Query 1: prescription_no
     const { data: directData, error: directError } = await supabase
@@ -625,13 +626,13 @@ const searchPrescriptions = async (searchTerm: string): Promise<UnifiedSearchRes
       .limit(20);
 
     if (directError && fieldError) {
-      console.error('[searchPrescriptions] Error:', directError, fieldError);
+      logError('[searchPrescriptions] Error:', directError, fieldError);
       return [];
     }
     const allData = [...(directData || []), ...(fieldData || [])]
       .filter((item, index, self) => index === self.findIndex(t => t.id === item.id));
     if (!allData || !Array.isArray(allData)) {
-      console.warn('[searchPrescriptions] No data returned or invalid format');
+      logWarn('[searchPrescriptions] No data returned or invalid format');
       return [];
     }
     const results = allData as Array<Prescription>;
@@ -673,7 +674,7 @@ const searchPrescriptions = async (searchTerm: string): Promise<UnifiedSearchRes
       };
     });
   } catch (error) {
-    console.error('[searchPrescriptions] Unexpected error:', error);
+    logError('[searchPrescriptions] Unexpected error:', error);
     return [];
   }
 };
@@ -811,7 +812,7 @@ const searchCustomers = async (field: string, value: string): Promise<CustomerSe
 
     return formattedResults;
   } catch (error) {
-    console.error('Error searching customers:', error);
+    logError('Error searching customers:', error);
     return [];
   }
 };
@@ -823,7 +824,7 @@ export const getRecordDetails = async <T = any>(
   id: string,
   sourceType: 'order' | 'contact_lens' | 'prescription'
 ): Promise<T> => {
-  console.log(`[getRecordDetails] Fetching ${sourceType} with ID: ${id}`);
+  logInfo(`[getRecordDetails] Fetching ${sourceType} with ID: ${id}`);
   try {
     switch (sourceType) {
       case 'order':
@@ -836,14 +837,14 @@ export const getRecordDetails = async <T = any>(
         throw new Error('Invalid source type');
     }
   } catch (error) {
-    console.error(`[getRecordDetails] Error fetching ${sourceType}:`, error);
+    logError(`[getRecordDetails] Error fetching ${sourceType}:`, error);
     throw new Error(`Failed to fetch ${sourceType} details`);
   }
 };
 
 // Helper function to get order details with items (refactored for billing table)
 const getOrderDetails = async (orderId: string): Promise<OrderDetails> => {
-  console.log(`[getOrderDetails] Fetching order with ID: ${orderId}`);
+  logInfo(`[getOrderDetails] Fetching order with ID: ${orderId}`);
   try {
     const { data: orderData, error: orderError } = await supabase
       .from('orders')
@@ -857,7 +858,7 @@ const getOrderDetails = async (orderId: string): Promise<OrderDetails> => {
       .single();
 
     if (orderError || !orderData) {
-      console.error('[getOrderDetails] Error:', orderError);
+      logError('[getOrderDetails] Error:', orderError);
       throw new Error('Order not found');
     }
 
@@ -876,7 +877,7 @@ const getOrderDetails = async (orderId: string): Promise<OrderDetails> => {
       sourceType: 'order',
     }));
 
-    console.log('[getOrderDetails] Items mapped for billing:', items);
+    logInfo('[getOrderDetails] Items mapped for billing:', items);
 
     return {
       ...orderData,
@@ -886,7 +887,7 @@ const getOrderDetails = async (orderId: string): Promise<OrderDetails> => {
       items,
     };
   } catch (error) {
-    console.error('[getOrderDetails] Exception:', error);
+    logError('[getOrderDetails] Exception:', error);
     throw error;
   }
 };
@@ -956,7 +957,7 @@ interface ContactLensDetails {
 
 // Helper to get contact lens details with items (updated to handle missing date column)
 const getContactLensDetails = async (prescriptionId: string): Promise<ContactLensDetails> => {
-  console.log(`[getContactLensDetails] Fetching contact lens with ID: ${prescriptionId}`);
+  logInfo(`[getContactLensDetails] Fetching contact lens with ID: ${prescriptionId}`);
   try {
     // First, get the contact lens prescription
     const { data: prescriptionData, error: prescriptionError } = await supabase
@@ -966,7 +967,7 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
       .single();
 
     if (prescriptionError || !prescriptionData) {
-      console.error('[getContactLensDetails] Error fetching prescription:', prescriptionError);
+      logError('[getContactLensDetails] Error fetching prescription:', prescriptionError);
       throw prescriptionError || new Error('Prescription not found');
     }
 
@@ -977,7 +978,7 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
       .eq('contact_lens_prescription_id', prescriptionId);
 
     if (itemsError) {
-      console.error('[getContactLensDetails] Error fetching items:', itemsError);
+      logError('[getContactLensDetails] Error fetching items:', itemsError);
       throw itemsError;
     }
 
@@ -1008,7 +1009,7 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
       diameter: item.diameter
     }));
 
-    console.log('[getContactLensDetails] Items mapped for billing:', items);
+    logInfo('[getContactLensDetails] Items mapped for billing:', items);
 
     const result: ContactLensDetails = {
       ...prescriptionData,
@@ -1032,14 +1033,14 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
 
     return result;
   } catch (error) {
-    console.error('[getContactLensDetails] Exception:', error);
+    logError('[getContactLensDetails] Exception:', error);
     throw error;
   }
 };
 
 // Helper to get prescription details (no items, but log for completeness)
 const getPrescriptionDetails = async (prescriptionId: string) => {
-  console.log(`[getPrescriptionDetails] Fetching prescription: ${prescriptionId}`);
+  logInfo(`[getPrescriptionDetails] Fetching prescription: ${prescriptionId}`);
   try {
     const { data, error } = await supabase
       .from('prescriptions')
@@ -1048,13 +1049,13 @@ const getPrescriptionDetails = async (prescriptionId: string) => {
       .single();
 
     if (error || !data) {
-      console.error('[getPrescriptionDetails] Error:', error);
+      logError('[getPrescriptionDetails] Error:', error);
       throw error;
     }
-    console.log('[getPrescriptionDetails] Found prescription:', data);
+    logInfo('[getPrescriptionDetails] Found prescription:', data);
     return data;
   } catch (error) {
-    console.error('[getPrescriptionDetails] Exception:', error);
+    logError('[getPrescriptionDetails] Exception:', error);
     throw error;
   }
 };
@@ -1105,7 +1106,7 @@ export const getCustomerDetails = async (customer: CustomerSearchResult | any) =
         // Add any other fields that might be needed
         ...(customer.originalData.data || {})
       };
-      console.log('Returning unified search customer data:', result);
+      logInfo('Returning unified search customer data:', result);
       return result;
     }
 
@@ -1162,7 +1163,7 @@ export const getCustomerDetails = async (customer: CustomerSearchResult | any) =
         .eq('id', customer.id)
         .single();
     } else {
-      console.warn('Unknown customer source, trying to fetch from any table:', source);
+      logWarn('Unknown customer source, trying to fetch from any table:', source);
       // Try to fetch from any table as a fallback
       const [prescriptionRes, orderRes, contactLensRes] = await Promise.all([
         supabase.from('prescriptions').select('*').eq('id', customer.id).single(),
@@ -1184,22 +1185,22 @@ export const getCustomerDetails = async (customer: CustomerSearchResult | any) =
     const { data, error } = await query;
 
     if (error) {
-      console.warn('Error fetching customer details, falling back to original data:', error);
+      logWarn('Error fetching customer details, falling back to original data:', error);
       throw error;
     }
 
     if (!data) {
-      console.warn('Customer not found in database, falling back to original data');
+      logWarn('Customer not found in database, falling back to original data');
       throw new Error('Customer not found');
     }
 
-    console.log('Fetched customer details from database:', data);
+    logInfo('Fetched customer details from database:', data);
     return data;
   } catch (error) {
-    console.error('Error fetching customer details:', error);
+    logError('Error fetching customer details:', error);
     // Instead of throwing, return the original customer data if available
     if (customer && typeof customer === 'object') {
-      console.warn('Falling back to original customer data due to error');
+      logWarn('Falling back to original customer data due to error');
       const result = {
         ...customer,
         // Map any necessary fields
@@ -1212,7 +1213,7 @@ export const getCustomerDetails = async (customer: CustomerSearchResult | any) =
         state: customer.state,
         pin_code: customer.pinCode || customer.pin_code || customer.originalData?.pin_code
       };
-      console.log('Returning fallback customer data:', result);
+      logInfo('Returning fallback customer data:', result);
       return result;
     }
     throw error;
@@ -1228,9 +1229,9 @@ import { getNormalizedMobile, getNormalizedName, getNormalizedNumber, getNormali
 
 export const getCustomerPurchaseHistory = async (mobileNo: string) => {
   try {
-    console.log('Fetching purchase history for mobile:', mobileNo);
+    logInfo('Fetching purchase history for mobile:', mobileNo);
     if (!mobileNo) {
-      console.error('No mobile number provided for purchase history lookup');
+      logError('No mobile number provided for purchase history lookup');
       return [];
     }
     
@@ -1250,7 +1251,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
       .order('date', { ascending: false });
       
     if (rxError) {
-      console.error('Error fetching prescriptions:', rxError);
+      logError('Error fetching prescriptions:', rxError);
       throw rxError;
     }
     
@@ -1268,7 +1269,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
       .order('order_date', { foreignTable: 'orders', ascending: false });
       
     if (orderError) {
-      console.error('Error fetching orders:', orderError);
+      logError('Error fetching orders:', orderError);
       throw orderError;
     }
     
@@ -1276,15 +1277,15 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
     let clPrescriptionsData: any[] = [];
     
     try {
-      console.log('Searching contact lens prescriptions for:', mobileNo);
+      logInfo('Searching contact lens prescriptions for:', mobileNo);
       
       // First, try to fetch by mobile number directly from contact_lens_prescriptions
-      console.log('Searching contact lens data by mobile/name:', mobileNo);
+      logInfo('Searching contact lens data by mobile/name:', mobileNo);
       // Build the query using Supabase's query builder
       // First, search directly in contact_lens_prescriptions
       // Skip the direct search as it's causing 400 errors
       // We'll rely on the fallback to search by prescription IDs
-      console.log('Skipping direct contact lens search, using fallback to search by prescription IDs');
+      logInfo('Skipping direct contact lens search, using fallback to search by prescription IDs');
       const clBySearch: any[] = [];
       const clSearchError: any = null;
       
@@ -1305,10 +1306,10 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
       
       // Also fetch by prescription IDs from the customer's prescriptions if we have any
       customerPrescriptionIds = customerPrescriptions?.map(p => p.id) || [];
-      console.log('Customer prescription IDs for contact lens search:', customerPrescriptionIds);
+      logInfo('Customer prescription IDs for contact lens search:', customerPrescriptionIds);
       
       if (customerPrescriptionIds.length > 0) {
-        console.log(`Searching for contact lens with ${customerPrescriptionIds.length} prescription IDs`);
+        logInfo(`Searching for contact lens with ${customerPrescriptionIds.length} prescription IDs`);
         
         const { data: clByPrescriptionId, error: clPrescError } = await supabase
           .from('contact_lens_prescriptions')
@@ -1316,7 +1317,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
           .in('prescription_id', customerPrescriptionIds)
           .order('created_at', { ascending: false });
           
-        console.log('Contact lens by prescription ID results:', {
+        logInfo('Contact lens by prescription ID results:', {
           data: clByPrescriptionId,
           error: clPrescError,
           count: clByPrescriptionId?.length || 0
@@ -1332,9 +1333,9 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
         }
       }
       
-      console.log(`Total contact lens prescriptions found: ${clPrescriptionsData.length}`);
+      logInfo(`Total contact lens prescriptions found: ${clPrescriptionsData.length}`);
     } catch (error) {
-      console.error('Error in contact lens prescription processing:', error);
+      logError('Error in contact lens prescription processing:', error);
       // Continue with whatever data we have if there's an error
     }
     // Helper function to format prescription details
@@ -1385,9 +1386,9 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
     };
 
     // Log the raw data for debugging
-    console.log('Raw prescriptions data:', prescriptionsData);
-    console.log('Raw orders data:', ordersData);
-    console.log('Raw contact lens data:', clPrescriptionsData);
+    logInfo('Raw prescriptions data:', prescriptionsData);
+    logInfo('Raw orders data:', ordersData);
+    logInfo('Raw contact lens data:', clPrescriptionsData);
 
     // Map prescriptions with enhanced details
     (prescriptionsData || [])
@@ -1437,7 +1438,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
           }
         });
       } catch (error) {
-        console.error('Error processing prescription:', rx, error);
+        logError('Error processing prescription:', rx, error);
       }
     });
 
@@ -1469,20 +1470,20 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
     };
 
     // Map orders with enhanced details
-    console.log('Processing orders data, count:', (ordersData || []).length);
+    logInfo('Processing orders data, count:', (ordersData || []).length);
     (ordersData || []).forEach((prescription: any, index: number) => {
-      console.log(`Processing order ${index + 1}:`, prescription);
+      logInfo(`Processing order ${index + 1}:`, prescription);
       if (prescription.orders && Array.isArray(prescription.orders)) {
         prescription.orders.forEach((order: any) => {
           if (!order || !order.order_items || !Array.isArray(order.order_items)) {
-            console.warn('Order missing items or items not an array:', order);
+            logWarn('Order missing items or items not an array:', order);
             return;
           }
           
           order.order_items.forEach((item: any) => {
             try {
               if (!item) {
-                console.warn('Skipping null/undefined order item');
+                logWarn('Skipping null/undefined order item');
                 return;
               }
               
@@ -1496,7 +1497,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
               
               // Skip items with no name and no details
               if (!itemName && !itemDetails) {
-                console.warn('Skipping item with no name or details:', item);
+                logWarn('Skipping item with no name or details:', item);
                 return;
               }
               
@@ -1525,7 +1526,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
                 _prescriptionNo: prescription.prescription_no
               });
             } catch (error) {
-              console.error('Error processing order item:', item, error);
+              logError('Error processing order item:', item, error);
             }
           });
         });
@@ -1565,12 +1566,12 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
     };
 
     // Map contact lens prescriptions with enhanced details
-    console.log('Processing contact lens data, count:', (clPrescriptionsData || []).length);
+    logInfo('Processing contact lens data, count:', (clPrescriptionsData || []).length);
     (clPrescriptionsData || []).forEach((cl: any, index: number) => {
-      console.log(`Processing contact lens ${index + 1}:`, cl);
+      logInfo(`Processing contact lens ${index + 1}:`, cl);
       try {
         if (!cl) {
-          console.warn('Skipping null/undefined contact lens prescription');
+          logWarn('Skipping null/undefined contact lens prescription');
           return;
         }
         
@@ -1584,14 +1585,14 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
           : [];
           
         if (contactLensItems.length === 0) {
-          console.warn('No contact lens items found for prescription:', cl.id);
+          logWarn('No contact lens items found for prescription:', cl.id);
           return;
         }
         
         contactLensItems.forEach((item: any, itemIndex: number) => {
           try {
             if (!item) {
-              console.warn(`Skipping null/undefined item at index ${itemIndex}`);
+              logWarn(`Skipping null/undefined item at index ${itemIndex}`);
               return;
             }
             
@@ -1610,7 +1611,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
             ].filter(Boolean).join(' ').trim();
             
             if (!itemName) {
-              console.warn('Skipping item with empty name:', item);
+              logWarn('Skipping item with empty name:', item);
               return;
             }
             
@@ -1652,11 +1653,11 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
               _prescriptionNo: prescriptionNo
             });
           } catch (itemError) {
-            console.error('Error processing contact lens item:', item, itemError);
+            logError('Error processing contact lens item:', item, itemError);
           }
         });
       } catch (clError) {
-        console.error('Error processing contact lens prescription:', cl, clError);
+        logError('Error processing contact lens prescription:', cl, clError);
       }
     });
 
@@ -1667,7 +1668,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
       return dateB - dateA; // Sort in descending order (newest first)
     });
 
-    console.log('Successfully fetched and processed purchase history:', {
+    logInfo('Successfully fetched and processed purchase history:', {
       prescriptions: customerPrescriptions?.length || 0,
       orders: (ordersData || []).length,
       contactLensPrescriptions: (clPrescriptionsData || []).length,
@@ -1676,7 +1677,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
 
     return allItems;
   } catch (error) {
-    console.error('Error in getCustomerPurchaseHistory:', error);
+    logError('Error in getCustomerPurchaseHistory:', error);
     throw error;
   }
 }

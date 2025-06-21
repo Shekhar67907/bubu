@@ -5,6 +5,7 @@ import { getTodayDate } from '../../utils/helpers';
 import CustomerSearch from './CustomerSearch';
 import { getCustomerDetails, getCustomerPurchaseHistory } from '../../Services/billingService';
 import { getNormalizedMobile, getNormalizedName, getNormalizedNumber, getNormalizedPinCode } from '../../utils/dataNormalization';
+import { logDebug, logError, logInfo } from '../../utils/logger';
 
 interface PurchaseHistory {
   id: string;
@@ -77,7 +78,7 @@ const BillingPage: React.FC = () => {
   // Handle customer selection from search
   const handleCustomerSelect = async (customer: any) => {
     try {
-      console.log('Customer selected from search:', customer);
+      logDebug('Customer selected from search', customer);
       setIsLoadingCustomer(true);
       
       // Clear previous customer data
@@ -92,7 +93,7 @@ const BillingPage: React.FC = () => {
       
       // Start with empty billing items
       setBillingItems([]);
-      console.log('Cleared previous billing items');
+      logDebug('Cleared previous billing items');
       
       // TEMP: Don't set any default billing items yet
       // setBillingItems([1, 2, 3].map(id => ({
@@ -111,21 +112,21 @@ const BillingPage: React.FC = () => {
       // })));
       
       // Fetch full customer details from their original table
-      console.log('Fetching detailed customer data...');
+      logDebug('Fetching detailed customer data...');
       const detailedCustomerData = await getCustomerDetails(customer);
-      console.log('Detailed customer data:', detailedCustomerData);
+      logDebug('Detailed customer data:', detailedCustomerData);
 
       // Use detailed data if available, otherwise fall back to search result data
       const customerData = detailedCustomerData || customer;
       const mobileNo = getNormalizedMobile(customerData) || getNormalizedMobile(customer);
       
       if (!mobileNo) {
-        console.error('No mobile number found for customer');
+        logError('No mobile number found for customer');
         return;
       }
 
       // Populate form fields with customer data
-      console.log('Setting customer details from data');
+      logDebug('Setting customer details from data');
       const customerName = getNormalizedName(customerData);
       
       // Extract name prefix if present (e.g., "Mr. John Doe" -> "Mr.")
@@ -153,7 +154,7 @@ const BillingPage: React.FC = () => {
       }
       
       // Get purchase history for the customer
-      console.log('Fetching purchase history for mobile:', mobileNo);
+      logDebug('Fetching purchase history for mobile:', mobileNo);
       const purchaseHistoryResponse = await getCustomerPurchaseHistory(mobileNo);
       
       // Ensure we have an array of purchase history items and filter out non-billable items
@@ -190,16 +191,16 @@ const BillingPage: React.FC = () => {
         }
       }
       
-      console.log('Filtered purchase history items:', purchaseHistoryItems);
+      logDebug('Filtered purchase history items:', purchaseHistoryItems);
       
-      console.log('Raw purchase history data:', {
+      logDebug('Raw purchase history data:', {
         data: purchaseHistoryItems,
         count: purchaseHistoryItems.length
       });
       
       // Log details of each item
       purchaseHistoryItems.forEach((item, index) => {
-        console.log(`Purchase history item ${index + 1}:`, {
+        logDebug(`Purchase history item ${index + 1}:`, {
           id: item.id,
           type: item.type,
           item_name: item.item_name,
@@ -213,12 +214,12 @@ const BillingPage: React.FC = () => {
       });
       
       // Update state with the purchase history items
-      console.log('Setting purchase history with items:', purchaseHistoryItems.length);
+      logDebug('Setting purchase history with items:', purchaseHistoryItems.length);
       setCustomerPurchaseHistory(purchaseHistoryItems);
       
       // Auto-populate billing items with recent purchases
       if (purchaseHistoryItems.length > 0) {
-        console.log('Populating billing items with history');
+        logDebug('Populating billing items with history');
         try {
           const populatedItems = [];
           let itemCount = 0;
@@ -228,10 +229,10 @@ const BillingPage: React.FC = () => {
           for (const purchase of purchaseHistoryItems) {
             if (itemCount >= maxItems) break;
             
-            console.log(`Processing purchase:`, purchase);
+            logDebug(`Processing purchase:`, purchase);
             
             // Log the full purchase object for debugging
-            console.log('Processing purchase details:', JSON.parse(JSON.stringify(purchase)));
+            logDebug('Processing purchase details:', JSON.parse(JSON.stringify(purchase)));
             
             // Handle order items (from order table)
             if (purchase.type === 'order') {
@@ -423,16 +424,16 @@ const BillingPage: React.FC = () => {
           
           // No need to fill empty rows, just use the populated items
           
-          console.log('Final billing items to set:', populatedItems);
+          logDebug('Final billing items to set:', populatedItems);
           setBillingItems(populatedItems);
         } catch (error) {
-          console.error('Error populating billing items:', error);
+          logError('Error populating billing items:', error);
           // Return empty array if there's an error
           setBillingItems([]);
         }
       }
     } catch (error) {
-      console.error('Error handling customer selection:', error);
+      logError('Error handling customer selection:', error);
     } finally {
       setIsLoadingCustomer(false);
     }
@@ -689,7 +690,7 @@ const BillingPage: React.FC = () => {
       return;
     }
     
-    console.log('Form submitted with valid data');
+    logDebug('Form submitted with valid data');
     // Proceed with form submission
   };
 
