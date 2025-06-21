@@ -1092,12 +1092,7 @@ const OrderCardForm: React.FC = () => {
       
       if (formData.age) updatedData.age = formData.age;
       if (formData.gender) updatedData.gender = formData.gender;
-      if (formData.customerCode) updatedData.customer_code = formData.customerCode;
-      if (formData.bookingBy) updatedData.booking_by = formData.bookingBy;
-      
-      // Add updated_at timestamp
-      updatedData.updated_at = new Date().toISOString();
-      
+      (updatedData as any).updated_at = new Date().toISOString();
       return updatedData;
     });
     setActiveField(null);
