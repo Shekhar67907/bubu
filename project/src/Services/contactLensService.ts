@@ -1489,6 +1489,60 @@ export const getDetailedContactLensData = async (contactLensPrescriptionId: stri
   }
 };
 
+/**
+ * Navigation methods for Contact Lens Card (First, Last, Prev, Next)
+ * All use updated_at for ordering and hydrate the full record for the form
+ */
+export const getFirstContactLens = async () => {
+  // Get the oldest (first) contact lens prescription by updated_at
+  const { data, error } = await supabase
+    .from('contact_lens_prescriptions')
+    .select('id')
+    .order('updated_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return { success: false, message: error?.message || 'No records found', data: null };
+  return await getDetailedContactLensData(data.id);
+};
+
+export const getLastContactLens = async () => {
+  // Get the most recent (last) contact lens prescription by updated_at
+  const { data, error } = await supabase
+    .from('contact_lens_prescriptions')
+    .select('id')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return { success: false, message: error?.message || 'No records found', data: null };
+  return await getDetailedContactLensData(data.id);
+};
+
+export const getPrevContactLens = async (currentUpdatedAt: string) => {
+  // Get the previous contact lens prescription (older than current)
+  const { data, error } = await supabase
+    .from('contact_lens_prescriptions')
+    .select('id, updated_at')
+    .lt('updated_at', currentUpdatedAt)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return { success: false, message: error?.message || 'No previous record', data: null };
+  return await getDetailedContactLensData(data.id);
+};
+
+export const getNextContactLens = async (currentUpdatedAt: string) => {
+  // Get the next contact lens prescription (newer than current)
+  const { data, error } = await supabase
+    .from('contact_lens_prescriptions')
+    .select('id, updated_at')
+    .gt('updated_at', currentUpdatedAt)
+    .order('updated_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error || !data) return { success: false, message: error?.message || 'No next record', data: null };
+  return await getDetailedContactLensData(data.id);
+};
+
 // Export as a service object
 export const contactLensService = {
   saveContactLensPrescription,
@@ -1498,5 +1552,9 @@ export const contactLensService = {
   deleteContactLensPrescription,
   searchContactLensPatients,
   getDetailedContactLensData,
-  generateContactLensPrescriptionNo
+  generateContactLensPrescriptionNo,
+  getFirstContactLens,
+  getLastContactLens,
+  getPrevContactLens,
+  getNextContactLens
 };

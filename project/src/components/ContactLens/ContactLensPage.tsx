@@ -185,6 +185,10 @@ const ContactLensPage: React.FC = () => {
   // This is critical to prevent unwanted recalculations
   const [isLoadingFromDB, setIsLoadingFromDB] = useState<boolean>(false);
   
+  // Navigation state
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [currentUpdatedAt, setCurrentUpdatedAt] = useState<string | null>(null);
+  
   const navigate = useNavigate();
   
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -813,7 +817,7 @@ const handlePatientSelect = (patientData: any) => {
                 '',
       
       // Keep existing Order Status functionality
-      orderStatus: patientData.contactLensData?.status || 'Processing',
+      orderStatus: (patientData.prescription?.status || patientData.contactLensData?.status || 'Processing'),
       
       // Fix for Date field (datetime-local)
       date: toDateTimeLocalValue(patientData.prescription.date),
@@ -1386,6 +1390,97 @@ const handlePatientSelect = (patientData: any) => {
     }
   };  
 
+  // Track current updated_at for navigation
+  useEffect(() => {
+    // Try to get updated_at from the most recent hydrated data
+    if ((formData as any)?.updated_at) {
+      setCurrentUpdatedAt((formData as any).updated_at);
+    } else if ((formData as any)?.contactLensData?.updated_at) {
+      setCurrentUpdatedAt((formData as any).contactLensData.updated_at);
+    } else {
+      setCurrentUpdatedAt(null);
+    }
+  }, [formData]);
+
+  // Navigation handlers
+  const handleFirst = async () => {
+    setIsNavigating(true);
+    try {
+      const result = await contactLensService.getFirstContactLens();
+      if (result.success && result.data) {
+        handlePatientSelect(result.data);
+        setNotification({ message: 'Loaded first (oldest) contact lens record.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: result.message || 'No records found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading first contact lens record.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleLast = async () => {
+    setIsNavigating(true);
+    try {
+      const result = await contactLensService.getLastContactLens();
+      if (result.success && result.data) {
+        handlePatientSelect(result.data);
+        setNotification({ message: 'Loaded last (most recent) contact lens record.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: result.message || 'No records found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading last contact lens record.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handlePrev = async () => {
+    setIsNavigating(true);
+    try {
+      let result;
+      if (!currentUpdatedAt) {
+        result = await contactLensService.getLastContactLens();
+      } else {
+        result = await contactLensService.getPrevContactLens(currentUpdatedAt);
+      }
+      if (result.success && result.data) {
+        handlePatientSelect(result.data);
+        setNotification({ message: 'Loaded previous contact lens record.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: result.message || 'No previous record found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading previous contact lens record.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleNext = async () => {
+    setIsNavigating(true);
+    try {
+      let result;
+      if (!currentUpdatedAt) {
+        result = await contactLensService.getFirstContactLens();
+      } else {
+        result = await contactLensService.getNextContactLens(currentUpdatedAt);
+      }
+      if (result.success && result.data) {
+        handlePatientSelect(result.data);
+        setNotification({ message: 'Loaded next contact lens record.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: result.message || 'No next record found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading next contact lens record.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
   return (
     <div className="p-4">
       <Card>
@@ -1393,10 +1488,10 @@ const handlePatientSelect = (patientData: any) => {
           <div className="flex justify-between items-center mb-4">
             <h1 className="text-xl font-bold">Contact Lens</h1>
             <div className="flex space-x-2">
-              <button className="text-blue-600 hover:underline">&lt;&lt; First</button>
-              <button className="text-blue-600 hover:underline">&lt; Prev</button>
-              <button className="text-blue-600 hover:underline">Next &gt;</button>
-              <button className="text-blue-600 hover:underline">Last &gt;&gt;</button>
+              <button className="text-blue-600 hover:underline" onClick={handleFirst} disabled={isNavigating}>&lt;&lt; First</button>
+              <button className="text-blue-600 hover:underline" onClick={handlePrev} disabled={isNavigating}>&lt; Prev</button>
+              <button className="text-blue-600 hover:underline" onClick={handleNext} disabled={isNavigating} >Next &gt;</button>
+              <button className="text-blue-600 hover:underline" onClick={handleLast} disabled={isNavigating}>Last &gt;&gt;</button>
               <button className="ml-8 text-blue-600 hover:underline">&lt;&lt; Display Prescription History &gt;&gt;</button>
             </div>
           </div>
@@ -1769,6 +1864,18 @@ const handlePatientSelect = (patientData: any) => {
             onAdd={handleAddContactLens}
             onClose={() => setShowManualForm(false)}
           />
+        </div>
+      )}
+
+      {isSaving && (
+        <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow">
+          Saving...
+        </div>
+      )}
+
+      {isNavigating && (
+        <div className="fixed bottom-4 left-4 bg-gray-700 text-white px-4 py-2 rounded shadow">
+          Loading contact lens record...
         </div>
       )}
     </div>
