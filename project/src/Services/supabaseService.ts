@@ -758,6 +758,72 @@ class PrescriptionService {
       return [];
     }
   }
+
+  // Fetch the oldest prescription (First) by updated_at
+  async getFirstPrescription(): Promise<PrescriptionData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('id')
+        .order('updated_at', { ascending: true })
+        .limit(1);
+      if (error || !data || data.length === 0) return null;
+      return this.getPrescription(data[0].id);
+    } catch (error) {
+      logError('[getFirstPrescription] Error:', error);
+      return null;
+    }
+  }
+
+  // Fetch the newest prescription (Last) by updated_at
+  async getLastPrescription(): Promise<PrescriptionData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('id')
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error || !data || data.length === 0) return null;
+      return this.getPrescription(data[0].id);
+    } catch (error) {
+      logError('[getLastPrescription] Error:', error);
+      return null;
+    }
+  }
+
+  // Fetch the next newer prescription (Prev) by updated_at
+  async getPrevPrescription(currentUpdatedAt: string): Promise<PrescriptionData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('id, updated_at')
+        .gt('updated_at', currentUpdatedAt)
+        .order('updated_at', { ascending: true })
+        .limit(1);
+      if (error || !data || data.length === 0) return null;
+      return this.getPrescription(data[0].id);
+    } catch (error) {
+      logError('[getPrevPrescription] Error:', error);
+      return null;
+    }
+  }
+
+  // Fetch the next older prescription (Next) by updated_at
+  async getNextPrescription(currentUpdatedAt: string): Promise<PrescriptionData | null> {
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('id, updated_at')
+        .lt('updated_at', currentUpdatedAt)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+      if (error || !data || data.length === 0) return null;
+      return this.getPrescription(data[0].id);
+    } catch (error) {
+      logError('[getNextPrescription] Error:', error);
+      return null;
+    }
+  }
 }
 
 // Create a singleton instance of the PrescriptionService

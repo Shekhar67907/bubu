@@ -20,6 +20,7 @@ import { useNavigate } from 'react-router-dom';
 import { printOrderCard } from '../../utils/printOrderService';
 // Import logger utility
 import { logInfo, logError, logDebug, logDev, logWarn } from '../../utils/logger';
+import { prescriptionService } from '../../Services/supabaseService';
 
 // Interface for the structure of a search suggestion (based on API response which is a full Prescription object)
 interface SearchSuggestion extends PrescriptionFormData {
@@ -141,6 +142,138 @@ const initialFormState: PrescriptionFormData = {
   title: 'Mr.' // Required field separate from namePrefix
 };
 
+// Helper to format money fields as string with two decimals
+function formatMoney(val: any) {
+  const num = Number(val);
+  return isNaN(num) ? '0.00' : num.toFixed(2);
+}
+
+// Utility to map order data to full form state
+const mapOrderToFormData = async (order: any, prevFormData: any) => {
+  if (!order) return prevFormData;
+  // Fetch the related prescription and eye data
+  const prescriptionId = order.prescription_id;
+  const prescriptionData = prescriptionId ? await prescriptionService.getPrescription(prescriptionId) : null;
+  // Fallbacks for missing prescription/eye data
+  const rightEye = prescriptionData?.rightEye || prevFormData.rightEye;
+  const leftEye = prescriptionData?.leftEye || prevFormData.leftEye;
+  const remarks = prescriptionData?.remarks || prevFormData.remarks;
+  // --- Enhanced mapping for order_items to selectedItems ---
+  const orderItems = (order.order_items || []).map((item: any) => ({
+    si: item.si ?? 0,
+    itemCode: item.item_code || '',
+    itemName: item.item_name || '',
+    taxPercent: item.tax_percent !== undefined ? Number(item.tax_percent) : 0,
+    rate: item.rate !== undefined ? Number(item.rate) : 0,
+    amount: item.amount !== undefined ? Number(item.amount) : 0,
+    qty: item.qty !== undefined ? Number(item.qty) : 1,
+    discountAmount: item.discount_amount !== undefined ? Number(item.discount_amount) : 0,
+    discountPercent: item.discount_percent !== undefined ? Number(item.discount_percent) : 0,
+    brandName: item.brand_name || '',
+    index: item.index || '',
+    coating: item.coating || '',
+    itemType: item.item_type || '',
+    unit: item.unit || '',
+  }));
+
+  // --- Robust payment fetching and mapping ---
+  let payment = (order.order_payments && order.order_payments[0]) || null;
+  // If payment is missing or incomplete, fetch from DB
+  if (!payment || payment.advance_cash === undefined || payment.advance_card_upi === undefined || payment.advance_other === undefined) {
+    if (order.id) {
+      try {
+        const { data: paymentData, error: paymentError } = await supabase
+          .from('order_payments')
+          .select('*')
+          .eq('order_id', order.id)
+          .maybeSingle();
+        if (paymentError) {
+          logError('[mapOrderToFormData] Error fetching payment from DB:', paymentError);
+        } else if (paymentData) {
+          logDebug('[mapOrderToFormData] Payment fetched from DB:', paymentData);
+          payment = paymentData;
+        } else {
+          logWarn('[mapOrderToFormData] No payment record found in DB for order:', order.id);
+        }
+      } catch (err) {
+        logError('[mapOrderToFormData] Exception fetching payment from DB:', err);
+      }
+    } else {
+      logWarn('[mapOrderToFormData] No order.id present to fetch payment from DB.');
+    }
+  } else {
+    logDebug('[mapOrderToFormData] Using joined payment data:', payment);
+  }
+
+  // Log the payment data being mapped
+  logDebug('[mapOrderToFormData] Final payment data used for mapping:', payment);
+
+  // Compose the full form state
+  return {
+    ...prevFormData,
+    // Prescription fields
+    prescriptionNo: prescriptionData?.prescriptionNo || '',
+    referenceNo: prescriptionData?.referenceNo || '',
+    class: prescriptionData?.class || '',
+    prescribedBy: prescriptionData?.prescribedBy || '',
+    date: prescriptionData?.date || '',
+    name: prescriptionData?.name || '',
+    title: prescriptionData?.title || 'Mr.',
+    age: prescriptionData?.age || '',
+    gender: prescriptionData?.gender || 'Male',
+    customerCode: prescriptionData?.customerCode || '',
+    birthDay: prescriptionData?.birthDay || '',
+    marriageAnniversary: prescriptionData?.marriageAnniversary || '',
+    address: prescriptionData?.address || '',
+    city: prescriptionData?.city || '',
+    state: prescriptionData?.state || '',
+    pinCode: prescriptionData?.pinCode || '',
+    phoneLandline: prescriptionData?.phoneLandline || '',
+    mobileNo: prescriptionData?.mobileNo || '',
+    email: prescriptionData?.email || '',
+    ipd: prescriptionData?.ipd || '',
+    bookingBy: order.booking_by || prescriptionData?.bookingBy || '',
+    rightEye,
+    leftEye,
+    balanceLens: prescriptionData?.balanceLens || false,
+    remarks,
+    retestAfter: prescriptionData?.retestAfter || '',
+    others: prescriptionData?.others || '',
+    // Order fields
+    billNo: order.bill_no || '',
+    orderStatus: order.status || '',
+    orderStatusDate: order.order_date || '',
+    selectedItems: orderItems,
+    // --- Payment fields autopopulated from DB, always formatted ---
+    paymentEstimate: formatMoney(payment?.payment_estimate),
+    schAmt: formatMoney(payment?.schedule_amount),
+    advance: formatMoney(payment?.total_advance),
+    balance: formatMoney(payment?.balance),
+    cashAdv1: formatMoney(payment?.advance_cash),
+    ccUpiAdv: formatMoney(payment?.advance_card_upi),
+    advanceOther: formatMoney(payment?.advance_other),
+    chequeAdv: formatMoney(payment?.advance_other),
+    taxAmount: formatMoney(payment?.tax_amount),
+    cashAdv2: prevFormData.cashAdv2,
+    cashAdv2Date: prevFormData.cashAdv2Date,
+    applyDiscount: prevFormData.applyDiscount,
+    discountType: prevFormData.discountType,
+    discountValue: prevFormData.discountValue,
+    discountReason: prevFormData.discountReason,
+    manualEntryType: prevFormData.manualEntryType,
+    manualEntryItemName: prevFormData.manualEntryItemName,
+    manualEntryRate: prevFormData.manualEntryRate,
+    manualEntryQty: prevFormData.manualEntryQty,
+    manualEntryItemAmount: prevFormData.manualEntryItemAmount,
+    currentDateTime: prevFormData.currentDateTime,
+    deliveryDateTime: prevFormData.deliveryDateTime,
+    isFromDatabase: true,
+    status: order.status || '',
+    updated_at: order.updated_at || new Date().toISOString(),
+    id: prescriptionData?.id || prevFormData.id
+  };
+};
+
 const OrderCardForm: React.FC = () => {
   // Generate and set a unique prescription number when the component mounts
   useEffect(() => {
@@ -187,6 +320,100 @@ const OrderCardForm: React.FC = () => {
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
+
+  // Track current order's updated_at for navigation
+  const [currentUpdatedAt, setCurrentUpdatedAt] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Update currentUpdatedAt whenever formData changes (if it has an updated_at)
+  useEffect(() => {
+    if ((formData as any)?.updated_at) {
+      setCurrentUpdatedAt((formData as any).updated_at);
+    }
+  }, [formData]);
+
+  // Navigation handlers
+  const handleFirstOrder = async () => {
+    setIsNavigating(true);
+    try {
+      const data = await orderService.getFirstOrder();
+      if (data) {
+        const mapped = await mapOrderToFormData(data, initialFormState);
+        setFormData(mapped);
+        setNotification({ message: 'Loaded first (oldest) order.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: 'No order records found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading first order.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleLastOrder = async () => {
+    setIsNavigating(true);
+    try {
+      const data = await orderService.getLastOrder();
+      if (data) {
+        const mapped = await mapOrderToFormData(data, initialFormState);
+        setFormData(mapped);
+        setNotification({ message: 'Loaded last (most recent) order.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: 'No order records found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading last order.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handlePrevOrder = async () => {
+    setIsNavigating(true);
+    try {
+      let data = null;
+      if (!currentUpdatedAt) {
+        data = await orderService.getLastOrder();
+      } else {
+        data = await orderService.getPrevOrder(currentUpdatedAt);
+      }
+      if (data) {
+        const mapped = await mapOrderToFormData(data, initialFormState);
+        setFormData(mapped);
+        setNotification({ message: 'Loaded previous order.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: 'No previous order found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading previous order.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleNextOrder = async () => {
+    setIsNavigating(true);
+    try {
+      let data = null;
+      if (!currentUpdatedAt) {
+        data = await orderService.getFirstOrder();
+      } else {
+        data = await orderService.getNextOrder(currentUpdatedAt);
+      }
+      if (data) {
+        const mapped = await mapOrderToFormData(data, initialFormState);
+        setFormData(mapped);
+        setNotification({ message: 'Loaded next order.', type: 'success', visible: true });
+      } else {
+        setNotification({ message: 'No next order found.', type: 'error', visible: true });
+      }
+    } catch (e) {
+      setNotification({ message: 'Error loading next order.', type: 'error', visible: true });
+    } finally {
+      setIsNavigating(false);
+    }
+  };
 
   // Handler for Exit button
   const handleExit = () => {
@@ -502,22 +729,36 @@ const OrderCardForm: React.FC = () => {
           ...item,
           // Add an explicit flag to mark this as data from database
           isFromDatabase: true,
-          
           // Payment calculation fields - preserve EXACT database values without any transformation
           paymentEstimate: orderPayment?.payment_estimate?.toString() || '0',
           taxAmount: orderPayment?.tax_amount?.toString() || '0',
           schAmt: orderPayment?.schedule_amount?.toString() || '0',
-          
           // Individual advance payment fields - preserve EXACT database values
           cashAdv1: orderPayment?.advance_cash?.toString() || '0',
           ccUpiAdv: orderPayment?.advance_card_upi?.toString() || '0',
           advanceOther: orderPayment?.advance_other?.toString() || '0',
           chequeAdv: orderPayment?.advance_other?.toString() || '0', // Fix: use advance_other, not tax_amount
-          
           // Database generated calculated fields - preserve EXACT database values
           // This is critical for ensuring we display what's actually in the database
           advance: orderPayment?.total_advance?.toString() || '0',
-          balance: orderPayment?.balance?.toString() || '0'
+          balance: orderPayment?.balance?.toString() || '0',
+          // Add all required fields for SearchSuggestion/PrescriptionFormData
+          others: item.others || '',
+          cashAdv2: item.cashAdv2 || '0.00',
+          cashAdv2Date: item.cashAdv2Date || '',
+          applyDiscount: item.applyDiscount || '',
+          discountType: item.discountType || 'percentage',
+          discountValue: item.discountValue || '',
+          discountReason: item.discountReason || '',
+          manualEntryType: item.manualEntryType || 'Frames',
+          manualEntryItemName: item.manualEntryItemName || '',
+          manualEntryRate: item.manualEntryRate || '',
+          manualEntryQty: item.manualEntryQty || 1,
+          manualEntryItemAmount: item.manualEntryItemAmount || 0,
+          currentDateTime: item.currentDateTime || '',
+          deliveryDateTime: item.deliveryDateTime || '',
+          billed: item.billed || false,
+          namePrefix: item.namePrefix || 'Mr.'
         };
         
         // Log the full structure of the payment data for debugging
@@ -652,7 +893,6 @@ const OrderCardForm: React.FC = () => {
           gender: item.gender || 'Male',
           customerCode: item.customer_code || '',
           mobileNo: item.mobile_no || '',
-          // Basic prescription fields
           status: item.status || '',
           date: item.date || '',
           class: item.class || '',
@@ -666,17 +906,16 @@ const OrderCardForm: React.FC = () => {
           phoneLandline: item.phone_landline || '',
           email: item.email || '',
           ipd: item.ipd || '',
-          bookingBy: item.booking_by || '', // Map booking_by from database
+          bookingBy: item.booking_by || '',
           namePrefix: item.title || 'Mr.',
           billed: false,
           balanceLens: item.balance_lens || false,
-          // Extract eye prescription data using helper function
           rightEye: {
             dv: {
               sph: findEyeData('right', 'distance', 'sph'),
               cyl: findEyeData('right', 'distance', 'cyl'),
               ax: findEyeData('right', 'distance', 'ax'),
-              add: findEyeData('right', 'distance', 'add_power'), // Database field is add_power, maps to add in our interface
+              add: findEyeData('right', 'distance', 'add_power'),
               vn: findEyeData('right', 'distance', 'vn', '6/'),
               rpd: findEyeData('right', 'distance', 'rpd')
             },
@@ -684,7 +923,7 @@ const OrderCardForm: React.FC = () => {
               sph: findEyeData('right', 'near', 'sph'),
               cyl: findEyeData('right', 'near', 'cyl'),
               ax: findEyeData('right', 'near', 'ax'),
-              add: findEyeData('right', 'near', 'add_power'), // Database field is add_power, maps to add in our interface
+              add: findEyeData('right', 'near', 'add_power'),
               vn: findEyeData('right', 'near', 'vn', 'N')
             }
           },
@@ -693,7 +932,7 @@ const OrderCardForm: React.FC = () => {
               sph: findEyeData('left', 'distance', 'sph'),
               cyl: findEyeData('left', 'distance', 'cyl'),
               ax: findEyeData('left', 'distance', 'ax'),
-              add: findEyeData('left', 'distance', 'add_power'), // Database field is add_power, maps to add in our interface
+              add: findEyeData('left', 'distance', 'add_power'),
               vn: findEyeData('left', 'distance', 'vn', '6/'),
               lpd: findEyeData('left', 'distance', 'lpd')
             },
@@ -701,7 +940,7 @@ const OrderCardForm: React.FC = () => {
               sph: findEyeData('left', 'near', 'sph'),
               cyl: findEyeData('left', 'near', 'cyl'),
               ax: findEyeData('left', 'near', 'ax'),
-              add: findEyeData('left', 'near', 'add_power'), // Database field is add_power, maps to add in our interface
+              add: findEyeData('left', 'near', 'add_power'),
               vn: findEyeData('left', 'near', 'vn', 'N')
             }
           },
@@ -716,12 +955,11 @@ const OrderCardForm: React.FC = () => {
             antiRadiationLenses: hasRemarkType('anti_radiation_lenses'),
             underCorrected: hasRemarkType('under_corrected')
           },
-          // Map the order items from the latest order (if any)
           selectedItems: orderItems.map((item: any) => ({
             si: item.si || 0,
             itemCode: item.item_code || '',
             itemName: item.item_name || '',
-            unit: 'PCS', // Default unit
+            unit: 'PCS',
             taxPercent: item.tax_percent || 0,
             rate: item.rate || 0,
             qty: item.qty || 1,
@@ -732,46 +970,37 @@ const OrderCardForm: React.FC = () => {
             index: item.index || '',
             coating: item.coating || ''
           })) || [],
-          
-          // Order status fields
           orderStatus: latestOrder?.status || 'Processing',
           orderStatusDate: latestOrder?.order_date || '',
           retestAfter: item.retest_after || '',
           billNo: latestOrder?.bill_no || '',
-          
-          // Payment related fields - populate from orderPayment if available
           paymentEstimate: orderPayment?.payment_estimate?.toString() || '0.00',
           schAmt: orderPayment?.schedule_amount?.toString() || '0.00',
-          // Use total_advance directly from the database instead of recalculating
           advance: orderPayment?.total_advance?.toString() || '0.00',
-          // Use balance directly from the database instead of recalculating
           balance: orderPayment?.balance?.toString() || '0.00',
           cashAdv1: orderPayment?.advance_cash?.toString() || '0.00',
           ccUpiAdv: orderPayment?.advance_card_upi?.toString() || '0.00',
-          chequeAdv: orderPayment?.advance_other?.toString() || '0.00',
-          cashAdv2: '0.00', // Not stored in database?
-          cashAdv2Date: '',
-          // Discount fields
-          applyDiscount: '',
-          discountType: 'percentage',
-          discountValue: '',
-          discountReason: '',
-          // Manual entry fields
-          manualEntryType: 'Frames',
-          manualEntryItemName: '',
-          manualEntryRate: '',
-          manualEntryQty: 1,
-          manualEntryItemAmount: 0,
-          others: '',
-          currentDateTime: '',
-          deliveryDateTime: '',
-          // Add the missing required properties
           advanceOther: orderPayment?.advance_other?.toString() || '0.00',
+          chequeAdv: orderPayment?.advance_other?.toString() || '0.00',
           taxAmount: orderItems.reduce((total: number, item: any) => {
-            // Calculate tax amount based on items
             const itemTaxAmount = (item.amount || 0) * (item.tax_percent || 0) / 100;
             return total + itemTaxAmount;
-          }, 0).toString() || '0.00'
+          }, 0).toString() || '0.00',
+          // Add all required fields with defaults if missing
+          others: item.others || '',
+          cashAdv2: item.cashAdv2 || '0.00',
+          cashAdv2Date: item.cashAdv2Date || '',
+          applyDiscount: item.applyDiscount || '',
+          discountType: item.discountType || 'percentage',
+          discountValue: item.discountValue || '',
+          discountReason: item.discountReason || '',
+          manualEntryType: item.manualEntryType || 'Frames',
+          manualEntryItemName: item.manualEntryItemName || '',
+          manualEntryRate: item.manualEntryRate || '',
+          manualEntryQty: item.manualEntryQty || 1,
+          manualEntryItemAmount: item.manualEntryItemAmount || 0,
+          currentDateTime: item.currentDateTime || '',
+          deliveryDateTime: item.deliveryDateTime || ''
         };
       });
           
@@ -2417,10 +2646,10 @@ const OrderCardForm: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-center mb-4 border-b pb-3 bg-blue-100 rounded-t-md px-4 py-2">
           <div className="flex space-x-1 mb-2 sm:mb-0">
             {/* Navigation Buttons - Keep these for now */} 
-            <Button type="button" variant="outline" size="sm" className="text-xs">&#60;&#60; First</Button>
-            <Button type="button" variant="outline" size="sm" className="text-xs">&#60; Prev</Button>
-            <Button type="button" variant="outline" size="sm" className="text-xs">Next &#62;</Button>
-            <Button type="button" variant="outline" size="sm" className="text-xs">Last &#62;&#62;</Button>
+            <Button type="button" variant="outline" size="sm" className="text-xs" onClick={handleFirstOrder}>&#60;&#60; First</Button>
+            <Button type="button" variant="outline" size="sm" className="text-xs" onClick={handlePrevOrder}>&#60; Prev</Button>
+            <Button type="button" variant="outline" size="sm" className="text-xs" onClick={handleNextOrder}>Next &#62;</Button>
+            <Button type="button" variant="outline" size="sm" className="text-xs" onClick={handleLastOrder}>Last &#62;&#62;</Button>
           </div>
           <Button type="button" variant="outline" size="sm" className="text-xs">&#60;&#60; Display Prescription History &#62;&#62;</Button>
         </div>
@@ -3147,6 +3376,11 @@ const OrderCardForm: React.FC = () => {
               }}>Add</Button>
             </div>
           </div>
+        </div>
+      )}
+      {isNavigating && (
+        <div className="fixed bottom-4 left-4 bg-gray-700 text-white px-4 py-2 rounded shadow">
+          Loading order...
         </div>
       )}
     </form>

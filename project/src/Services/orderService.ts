@@ -452,6 +452,77 @@ const generateUniquePrescriptionNumber = async (maxRetries = 3): Promise<string>
   return `P${now.getTime().toString().slice(-10)}`;
 };
 
+// Navigation methods for orders using updated_at
+const getFirstOrder = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id')
+      .order('updated_at', { ascending: true })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    const orderId = data[0].id;
+    const result = await getOrderById(orderId);
+    return result.success ? result.data : null;
+  } catch (error) {
+    logError('[getFirstOrder] Error:', error);
+    return null;
+  }
+};
+
+const getLastOrder = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id')
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    const orderId = data[0].id;
+    const result = await getOrderById(orderId);
+    return result.success ? result.data : null;
+  } catch (error) {
+    logError('[getLastOrder] Error:', error);
+    return null;
+  }
+};
+
+const getPrevOrder = async (currentUpdatedAt: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, updated_at')
+      .gt('updated_at', currentUpdatedAt)
+      .order('updated_at', { ascending: true })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    const orderId = data[0].id;
+    const result = await getOrderById(orderId);
+    return result.success ? result.data : null;
+  } catch (error) {
+    logError('[getPrevOrder] Error:', error);
+    return null;
+  }
+};
+
+const getNextOrder = async (currentUpdatedAt: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('orders')
+      .select('id, updated_at')
+      .lt('updated_at', currentUpdatedAt)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+    if (error || !data || data.length === 0) return null;
+    const orderId = data[0].id;
+    const result = await getOrderById(orderId);
+    return result.success ? result.data : null;
+  } catch (error) {
+    logError('[getNextOrder] Error:', error);
+    return null;
+  }
+};
+
 export const orderService = {
   saveOrder,
   getOrdersByPrescriptionId,
@@ -459,5 +530,9 @@ export const orderService = {
   checkNumberExists,
   generateUniquePrescriptionNumber,
   generateOrderNo,
-  generateBillNo
+  generateBillNo,
+  getFirstOrder,
+  getLastOrder,
+  getPrevOrder,
+  getNextOrder
 };

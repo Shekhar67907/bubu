@@ -394,6 +394,122 @@ const PrescriptionPage: React.FC = () => {
     }
   };
 
+  // Track current prescription's created_at for navigation
+  const [currentCreatedAt, setCurrentCreatedAt] = useState<string | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Update currentCreatedAt whenever formData changes (if it has a created_at)
+  useEffect(() => {
+    if ((formData as any)?.created_at) {
+      setCurrentCreatedAt((formData as any).created_at);
+    }
+  }, [formData]);
+
+  // Navigation handlers
+  const handleFirst = async () => {
+    setIsNavigating(true);
+    try {
+      const data = await prescriptionService.getFirstPrescription();
+      if (data) {
+        setFormData(data);
+        setToastMessage('Loaded first (oldest) prescription.');
+        setToastType('success');
+        setShowToast(true);
+      } else {
+        setToastMessage('No prescription records found.');
+        setToastType('error');
+        setShowToast(true);
+      }
+    } catch (e) {
+      setToastMessage('Error loading first prescription.');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleLast = async () => {
+    setIsNavigating(true);
+    try {
+      const data = await prescriptionService.getLastPrescription();
+      if (data) {
+        setFormData(data);
+        setToastMessage('Loaded last (most recent) prescription.');
+        setToastType('success');
+        setShowToast(true);
+      } else {
+        setToastMessage('No prescription records found.');
+        setToastType('error');
+        setShowToast(true);
+      }
+    } catch (e) {
+      setToastMessage('Error loading last prescription.');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handlePrev = async () => {
+    setIsNavigating(true);
+    try {
+      let data = null;
+      if (!currentCreatedAt) {
+        // If nothing loaded, Prev = latest
+        data = await prescriptionService.getLastPrescription();
+      } else {
+        data = await prescriptionService.getPrevPrescription(currentCreatedAt);
+      }
+      if (data) {
+        setFormData(data);
+        setToastMessage('Loaded previous prescription.');
+        setToastType('success');
+        setShowToast(true);
+      } else {
+        setToastMessage('No previous prescription found.');
+        setToastType('error');
+        setShowToast(true);
+      }
+    } catch (e) {
+      setToastMessage('Error loading previous prescription.');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
+  const handleNext = async () => {
+    setIsNavigating(true);
+    try {
+      let data = null;
+      if (!currentCreatedAt) {
+        // If nothing loaded, Next = oldest
+        data = await prescriptionService.getFirstPrescription();
+      } else {
+        data = await prescriptionService.getNextPrescription(currentCreatedAt);
+      }
+      if (data) {
+        setFormData(data);
+        setToastMessage('Loaded next prescription.');
+        setToastType('success');
+        setShowToast(true);
+      } else {
+        setToastMessage('No next prescription found.');
+        setToastType('error');
+        setShowToast(true);
+      }
+    } catch (e) {
+      setToastMessage('Error loading next prescription.');
+      setToastType('error');
+      setShowToast(true);
+    } finally {
+      setIsNavigating(false);
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">Prescription Entry Form</h2>
@@ -467,7 +583,14 @@ const PrescriptionPage: React.FC = () => {
         )}
       </Card>
       
-      <PrescriptionForm onSubmit={handleSubmit} initialData={formData} />
+      <PrescriptionForm 
+        onSubmit={handleSubmit} 
+        initialData={formData} 
+        onFirst={handleFirst}
+        onPrev={handlePrev}
+        onNext={handleNext}
+        onLast={handleLast}
+      />
       {showToast && (
         <ToastNotification
           message={toastMessage}
@@ -478,6 +601,11 @@ const PrescriptionPage: React.FC = () => {
       {isSaving && (
         <div className="fixed bottom-4 right-4 bg-blue-500 text-white px-4 py-2 rounded shadow">
           Saving...
+        </div>
+      )}
+      {isNavigating && (
+        <div className="fixed bottom-4 left-4 bg-gray-700 text-white px-4 py-2 rounded shadow">
+          Loading prescription...
         </div>
       )}
     </div>

@@ -32,9 +32,13 @@ import { logInfo, logError, logDebug, logDev, logWarn } from '../../utils/logger
 interface PrescriptionFormProps {
   onSubmit: (data: PrescriptionData) => void;
   initialData?: PrescriptionData;
+  onFirst?: () => void;
+  onPrev?: () => void;
+  onNext?: () => void;
+  onLast?: () => void;
 }
 
-const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialData }) => {
+const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialData, onFirst, onPrev, onNext, onLast }) => {
   // Use initialData if provided, otherwise use default values
   const [formData, setFormData] = useState<PrescriptionData>(initialData || {
     prescriptionNo: generatePrescriptionNo(),
@@ -609,16 +613,16 @@ const PrescriptionForm: React.FC<PrescriptionFormProps> = ({ onSubmit, initialDa
           </Button>
           
           <div className="flex space-x-2">
-            <Button type="button" variant="outline" size="sm">
+            <Button type="button" variant="outline" size="sm" onClick={onFirst}>
               &lt;&lt; First
             </Button>
-            <Button type="button" variant="outline" size="sm">
+            <Button type="button" variant="outline" size="sm" onClick={onPrev}>
               {"< Prev"}
             </Button>
-            <Button type="button" variant="outline" size="sm">
+            <Button type="button" variant="outline" size="sm" onClick={onNext}>
               Next &gt;
             </Button>
-            <Button type="button" variant="outline" size="sm">
+            <Button type="button" variant="outline" size="sm" onClick={onLast}>
               Last &gt;&gt;
             </Button>
           </div>

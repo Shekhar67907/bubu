@@ -125,7 +125,7 @@ const PaymentSection: React.FC<PaymentSectionProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2 border-t">
         <Input
           label="Advance Cash"
-          value={formData.cashAdv1 === '0.00' ? '' : formData.cashAdv1}
+          value={formData.cashAdv1}
           name="cashAdv1"
           onChange={handleNumericInputChange}
           type="number"
@@ -137,7 +137,7 @@ const PaymentSection: React.FC<PaymentSectionProps> = ({
         
         <Input
           label="Advance Card/UPI"
-          value={formData.ccUpiAdv === '0.00' ? '' : formData.ccUpiAdv}
+          value={formData.ccUpiAdv}
           name="ccUpiAdv"
           onChange={handleNumericInputChange}
           type="number"
@@ -149,7 +149,7 @@ const PaymentSection: React.FC<PaymentSectionProps> = ({
         
         <Input
           label="Advance Other"
-          value={formData.advanceOther === '0.00' ? '' : formData.advanceOther}
+          value={formData.advanceOther}
           name="advanceOther"
           onChange={e => {
             logDebug('Advance Other changed', { value: e.target.value });
