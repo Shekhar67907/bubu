@@ -224,7 +224,85 @@ const BillingPage: React.FC = () => {
           const populatedItems = [];
           let itemCount = 0;
           const maxItems = 3; // Maximum number of items to show initially
-          
+
+          // --- Aggregate payment fields across only selected billing items ---
+          const selectedItems = billingItems.filter(item => item.selected);
+          // DEBUG: Log selected items for payment calculation
+          console.debug('[BILLING][PAYMENT] Selected items for payment calculation', selectedItems);
+          let totalAdvance = 0;
+          let totalEstimate = 0;
+          let totalDiscount = 0;
+          let totalPayment = 0;
+          let totalCash = 0;
+          let totalCcUpiAdv = 0;
+          let totalCheque = 0;
+          let totalTax = 0;
+          let totalBalance = 0;
+          for (const item of selectedItems) {
+            const payment = item._originalPurchase?.payment || item.payment;
+            // --- Robust type handling for advance ---
+            let advanceValue = 0;
+            if (payment && !isNaN(Number(payment.advance)) && Number(payment.advance) > 0) {
+              advanceValue = Number(payment.advance);
+            } else if (payment && (
+              !isNaN(Number(payment.advance_cash)) ||
+              !isNaN(Number(payment.advance_card_upi)) ||
+              !isNaN(Number(payment.advance_other))
+            )) {
+              advanceValue =
+                (Number(payment.advance_cash) || 0) +
+                (Number(payment.advance_card_upi) || 0) +
+                (Number(payment.advance_other) || 0);
+            } else if (!isNaN(Number(item.advance)) && Number(item.advance) > 0) {
+              advanceValue = Number(item.advance);
+            }
+            // Log each item's advance value used
+            console.debug('[BILLING][PAYMENT] Advance value used for item', { itemId: item.id, advanceValue, paymentAdvance: payment?.advance, itemAdvance: item.advance });
+            totalAdvance += advanceValue;
+            // --- Other fields, also robustly handle types ---
+            totalEstimate += !isNaN(Number(payment?.estimate)) ? Number(payment.estimate) : (!isNaN(Number(item.estimate)) ? Number(item.estimate) : 0);
+            totalDiscount += !isNaN(Number(payment?.discount_amount)) ? Number(payment.discount_amount) : (!isNaN(Number(item.discount)) ? Number(item.discount) : 0);
+            // --- Payment: sum all paid amounts (advance, cash, card, cheque, etc.) ---
+            let paid = 0;
+            if (payment) {
+              paid += Number(payment.advance) || 0;
+              paid += Number(payment.cash_advance) || 0;
+              paid += Number(payment.card_upi_advance) || 0;
+              paid += Number(payment.cheque_advance) || 0;
+              paid += Number(payment.advance_cash) || 0;
+              paid += Number(payment.advance_card_upi) || 0;
+              paid += Number(payment.advance_other) || 0;
+            }
+            totalPayment += paid;
+            totalCash += !isNaN(Number(payment?.cash_advance)) ? Number(payment.cash_advance) : 0;
+            totalCcUpiAdv += !isNaN(Number(payment?.card_upi_advance)) ? Number(payment.card_upi_advance) : 0;
+            totalCheque += !isNaN(Number(payment?.cheque_advance)) ? Number(payment.cheque_advance) : 0;
+            totalTax += !isNaN(Number(item.taxPercent)) ? Number(item.taxPercent) : 0;
+            totalBalance += !isNaN(Number(payment?.balance)) ? Number(payment.balance) : 0;
+          }
+          // DEBUG: Log computed payment totals
+          console.debug('[BILLING][PAYMENT] Computed totals', {
+            totalAdvance,
+            totalEstimate,
+            totalDiscount,
+            totalPayment,
+            totalCash,
+            totalCcUpiAdv,
+            totalCheque,
+            totalTax,
+            totalBalance
+          });
+          // Set payment section fields to these totals
+          setAdvance(totalAdvance ? totalAdvance.toString() : '0.00');
+          setEstimate(totalEstimate ? totalEstimate.toString() : '0.00');
+          setSchDisc(totalDiscount ? totalDiscount.toString() : '0.00');
+          setPayment(totalPayment ? totalPayment.toString() : '0.00');
+          setCash(totalCash ? totalCash.toString() : '0.00');
+          setCcUpiAdv(totalCcUpiAdv ? totalCcUpiAdv.toString() : '0.00');
+          setCheque(totalCheque ? totalCheque.toString() : '0.00');
+          setTax(totalTax ? totalTax.toString() : '0.00');
+          setBalance(totalBalance ? totalBalance.toString() : '0.00');
+
           // Process each history item
           for (const purchase of purchaseHistoryItems) {
             if (itemCount >= maxItems) break;
@@ -251,7 +329,7 @@ const BillingPage: React.FC = () => {
                 
                 populatedItems.push({
                   id: `order_${purchase.id}_${item.id || itemCount}`,
-                  selected: false,
+                  selected: true,
                   itemCode: itemCode,
                   itemName: itemName,
                   orderNo: orderNo,
@@ -286,7 +364,7 @@ const BillingPage: React.FC = () => {
                   
                   populatedItems.push({
                     id: `${purchase.id}_${item.id || itemCount}`,
-                    selected: false,
+                    selected: true,
                     itemCode: item.item_code || `ITEM-${itemCount}`,
                     itemName: itemName,
                     orderNo: purchase.referenceNo || purchase.order_no || `ORDER-${purchase.id}`,
@@ -339,6 +417,24 @@ const BillingPage: React.FC = () => {
                 const discountAmount = typeof item.discount_amount === 'number' ? item.discount_amount : parseFloat(item.discount_amount || '0');
                 const amount = item.amount || (rate * quantity) || 0;
                 
+                // --- Contact Lens Payment Mapping (GUARANTEED FIX) ---
+                // Always get payment from parent purchase for each contact lens item
+                const parentPayment = purchase.payment || purchase._originalPurchase?.payment || purchase._originalPurchase?._originalPurchase?.payment;
+                const clDiscount = parentPayment ? parentPayment.discount_amount : discountAmount;
+                const clDiscountPercent = parentPayment ? parentPayment.discount_percent : discountPercent;
+                const clAdvance = parentPayment ? parentPayment.advance : 0;
+                const clEstimate = parentPayment ? parentPayment.estimate : amount;
+                // Debug log for every contact lens item
+                console.debug('DEBUG: Contact lens mapping (guaranteed fix)', {
+                  parentPayment,
+                  clDiscount,
+                  clDiscountPercent,
+                  clAdvance,
+                  clEstimate,
+                  purchase,
+                  item
+                });
+                
                 // Build a descriptive name for contact lenses
                 const itemName = [
                   brand || 'Contact Lens',
@@ -347,36 +443,25 @@ const BillingPage: React.FC = () => {
                   side,
                   baseCurve ? `BC:${baseCurve}` : '',
                   diameter ? `DIA:${diameter}` : ''
-                ].filter(Boolean).join(' ').trim();
-                
+                ]
+                  .filter(Boolean)
+                  .join(' ');
                 populatedItems.push({
-                  id: `cl_${purchase.id}_${item.id || itemCount}`,
-                  selected: false,
-                  itemCode: item.item_code || `CL-${item.id || itemCount}`,
-                  itemName: itemName || 'Contact Lens',
-                  orderNo: purchase.prescription_no || purchase.referenceNo || `CL-${purchase.id}`,
-                  rate: getNormalizedNumber(item.rate || 0),
-                  taxPercent: getNormalizedNumber(item.tax_percent || 0),
-                  quantity: getNormalizedNumber(item.quantity || 1),
+                  id: `cl_${purchase.id}_${item.id || itemCount}_${item.id}`,
+                  selected: true,
+                  itemCode: `CL-${item.id}`,
+                  itemName: itemName,
+                  orderNo: purchase.referenceNo || purchase.order_no || `CL-${purchase.id}`,
+                  rate: getNormalizedNumber(rate),
+                  taxPercent: getNormalizedNumber(taxPercent),
+                  quantity: getNormalizedNumber(quantity),
                   amount: getNormalizedNumber(amount),
-                  discount: getNormalizedNumber(typeof item.discount_amount === 'number' ? item.discount_amount : parseFloat(item.discount_amount || '0')),
-                  discountPercent: getNormalizedNumber(typeof item.discount_percent === 'number' ? item.discount_percent : parseFloat(item.discount_percent || '0')),
-                  _originalPurchase: { 
-                    ...purchase, 
-                    ...item,
-                    // Ensure we preserve the original discount values
-                    discount_amount: typeof item.discount_amount === 'number' ? item.discount_amount : parseFloat(item.discount_amount || '0'),
-                    discount_percent: typeof item.discount_percent === 'number' ? item.discount_percent : parseFloat(item.discount_percent || '0'),
-                    // Ensure we have all required fields for contact lens items
-                    brand: item.brand,
-                    material: item.material,
-                    power: item.power,
-                    base_curve: item.base_curve,
-                    diameter: item.diameter,
-                    quantity: item.quantity || 1,
-                    rate: item.rate || 0,
-                    amount: item.amount || 0
-                  }
+                  // Use payment discount/advance/estimate if available, else fallback to item
+                  discount: getNormalizedNumber(clDiscount),
+                  discountPercent: getNormalizedNumber(clDiscountPercent),
+                  advance: getNormalizedNumber(clAdvance),
+                  estimate: getNormalizedNumber(clEstimate),
+                  payment: parentPayment || {},
                 });
                 itemCount++;
               }
@@ -397,7 +482,7 @@ const BillingPage: React.FC = () => {
               
               populatedItems.push({
                 id: `rx_${purchase.id}`,
-                selected: false,
+                selected: true,
                 itemCode: identifier,
                 itemName: itemName,
                 orderNo: identifier,
@@ -453,6 +538,9 @@ const BillingPage: React.FC = () => {
   
   // Billing table state (initialized in useEffect above)
   const [discountToApply, setDiscountToApply] = useState('');
+  
+  // Track if user has manually changed advance
+  const [advanceManuallySet, setAdvanceManuallySet] = useState(false);
   
   const jobTypes = ['OrderCard', 'Contact lens', 'Repairing', 'Others'];
   const namePrefixOptions = ['Mr.', 'Mrs.', 'Ms.'];
@@ -527,60 +615,6 @@ const BillingPage: React.FC = () => {
     );
   };
   
-  // Calculate and update totals when billing items change
-  useEffect(() => {
-    let subtotal = 0;
-    let totalTax = 0;
-    let totalDiscount = 0;
-    
-    // Calculate item totals
-    billingItems.forEach(item => {
-      const quantity = parseFloat(item.quantity) || 0;
-      const rate = parseFloat(item.rate) || 0;
-      const taxPercent = parseFloat(item.taxPercent) || 0;
-      const discount = parseFloat(item.discount) || 0;
-      
-      // Calculate base amount (quantity * rate)
-      const baseAmount = quantity * rate;
-      
-      // Calculate tax on base amount
-      const taxAmount = (baseAmount * taxPercent) / 100;
-      
-      // Add to totals
-      subtotal += baseAmount;  // Subtotal before tax and discount
-      totalTax += taxAmount;
-      totalDiscount += discount;
-    });
-    
-    // Calculate estimate (subtotal + tax)
-    const estimate = subtotal + totalTax;
-    
-    // Calculate total after discount (apply discount to subtotal before tax)
-    const subtotalAfterDiscount = Math.max(0, subtotal - totalDiscount);
-    const totalAfterDiscount = subtotalAfterDiscount + totalTax;
-    
-    // Update payment section
-    setEstimate(getNormalizedNumber(estimate));
-    setTax(getNormalizedNumber(totalTax));
-    // Set scheduled amount to total discount from all items
-    setSchDisc(getNormalizedNumber(totalDiscount));
-    
-    // Calculate balance (total after discount - payments - advances - cash)
-    const paymentAmount = parseFloat(payment) || 0;
-    const advanceAmount = parseFloat(advance) || 0;
-    const cashAmount = parseFloat(cash) || 0;
-    const ccUpiAmount = parseFloat(ccUpiAdv) || 0;
-    const chequeAmount = parseFloat(cheque) || 0;
-    
-    // Total payments including all methods
-    const totalPayments = paymentAmount + advanceAmount + cashAmount + ccUpiAmount + chequeAmount;
-    
-    // Calculate balance
-    const balanceAmount = totalAfterDiscount - totalPayments;
-    
-    setBalance(getNormalizedNumber(Math.max(0, balanceAmount))); // Ensure balance doesn't go negative
-  }, [billingItems, payment, advance, cash, ccUpiAdv, cheque]);
-
   // Handle payment field changes
   const handlePaymentChange = (field: string, value: string) => {
     // Ensure the value is a valid number or empty string
@@ -624,7 +658,7 @@ const BillingPage: React.FC = () => {
   const handleAddRow = () => {
     const newItem = {
       id: Date.now().toString(),
-      selected: false,
+      selected: true,
       itemCode: '',
       itemName: '',
       orderNo: '',
@@ -728,6 +762,143 @@ const BillingPage: React.FC = () => {
   const handleExitBill = () => {
     navigate('/');
   };
+
+  // --- COMPREHENSIVE LOGGING ---
+  console.debug('[BILLING][RENDER] BillingPage return start', { billingItemsCount: billingItems.length });
+
+  // --- Payment Calculation ---
+  let totalAdvance = 0;
+  let totalEstimate = 0;
+  let totalDiscount = 0;
+  let totalPayment = 0;
+  let totalCash = 0;
+  let totalCcUpiAdv = 0;
+  let totalCheque = 0;
+  let totalTax = 0;
+  let totalBalance = 0;
+
+  const selectedItems = billingItems.filter(item => item.selected);
+  console.debug('[BILLING][PAYMENT] Selected items for payment calculation', selectedItems);
+
+  for (const item of selectedItems) {
+    const payment = item._originalPurchase?.payment || item.payment;
+    // --- Robust type handling for advance ---
+    let advanceValue = 0;
+    if (payment && !isNaN(Number(payment.advance)) && Number(payment.advance) > 0) {
+      advanceValue = Number(payment.advance);
+    } else if (payment && (
+      !isNaN(Number(payment.advance_cash)) ||
+      !isNaN(Number(payment.advance_card_upi)) ||
+      !isNaN(Number(payment.advance_other))
+    )) {
+      advanceValue =
+        (Number(payment.advance_cash) || 0) +
+        (Number(payment.advance_card_upi) || 0) +
+        (Number(payment.advance_other) || 0);
+    } else if (!isNaN(Number(item.advance)) && Number(item.advance) > 0) {
+      advanceValue = Number(item.advance);
+    }
+    // Log each item's advance value used
+    console.debug('[BILLING][PAYMENT] Advance value used for item', { itemId: item.id, advanceValue, paymentAdvance: payment?.advance, itemAdvance: item.advance });
+    totalAdvance += advanceValue;
+    // --- Other fields, also robustly handle types ---
+    totalEstimate += !isNaN(Number(payment?.estimate)) ? Number(payment.estimate) : (!isNaN(Number(item.estimate)) ? Number(item.estimate) : 0);
+    totalDiscount += !isNaN(Number(payment?.discount_amount)) ? Number(payment.discount_amount) : (!isNaN(Number(item.discount)) ? Number(item.discount) : 0);
+    // --- Payment: sum all paid amounts (advance, cash, card, cheque, etc.) ---
+    let paid = 0;
+    if (payment) {
+      paid += Number(payment.advance) || 0;
+      paid += Number(payment.cash_advance) || 0;
+      paid += Number(payment.card_upi_advance) || 0;
+      paid += Number(payment.cheque_advance) || 0;
+      paid += Number(payment.advance_cash) || 0;
+      paid += Number(payment.advance_card_upi) || 0;
+      paid += Number(payment.advance_other) || 0;
+    }
+    totalPayment += paid;
+    totalCash += !isNaN(Number(payment?.cash_advance)) ? Number(payment.cash_advance) : 0;
+    totalCcUpiAdv += !isNaN(Number(payment?.card_upi_advance)) ? Number(payment.card_upi_advance) : 0;
+    totalCheque += !isNaN(Number(payment?.cheque_advance)) ? Number(payment.cheque_advance) : 0;
+    totalTax += !isNaN(Number(item.taxPercent)) ? Number(item.taxPercent) : 0;
+    totalBalance += !isNaN(Number(payment?.balance)) ? Number(payment.balance) : 0;
+  }
+
+  // --- DEBUG: Log payment section values before render ---
+  console.debug('[BILLING][PAYMENT] Final payment section values before render', {
+    totalAdvance,
+    totalEstimate,
+    totalDiscount,
+    totalPayment,
+    totalCash,
+    totalCcUpiAdv,
+    totalCheque,
+    totalTax,
+    totalBalance
+  });
+
+  React.useEffect(() => {
+    if (billingItems.length > 0) {
+      console.debug('[BILLING][RENDER] Payment section JSX rendered');
+    }
+  }, [billingItems.length]);
+
+  React.useEffect(() => {
+    let subtotal = 0;
+    let totalTax = 0;
+    let totalDiscount = 0;
+
+    billingItems.forEach(item => {
+      const quantity = parseFloat(item.quantity) || 0;
+      const rate = parseFloat(item.rate) || 0;
+      const taxPercent = parseFloat(item.taxPercent) || 0;
+      const discount = parseFloat(item.discount) || 0;
+      const baseAmount = quantity * rate;
+      const taxAmount = (baseAmount * taxPercent) / 100;
+      subtotal += baseAmount;
+      totalTax += taxAmount;
+      totalDiscount += discount;
+    });
+
+    const estimate = subtotal + totalTax;
+    const subtotalAfterDiscount = Math.max(0, subtotal - totalDiscount);
+    const totalAfterDiscount = subtotalAfterDiscount + totalTax;
+
+    setEstimate(getNormalizedNumber(estimate));
+    setTax(getNormalizedNumber(totalTax));
+    setSchDisc(getNormalizedNumber(totalDiscount));
+
+    const paymentAmount = parseFloat(payment) || 0;
+    const advanceAmount = parseFloat(advance) || 0;
+    const cashAmount = parseFloat(cash) || 0;
+    const ccUpiAmount = parseFloat(ccUpiAdv) || 0;
+    const chequeAmount = parseFloat(cheque) || 0;
+
+    // Total payments including all methods
+    const totalPayments = paymentAmount + advanceAmount + cashAmount + ccUpiAmount + chequeAmount;
+    const balanceAmount = totalAfterDiscount - totalPayments;
+    setBalance(getNormalizedNumber(Math.max(0, balanceAmount)));
+  }, [billingItems, payment, advance, cash, ccUpiAdv, cheque]);
+
+  React.useEffect(() => {
+    let totalAdvance = 0;
+    const selectedItems = billingItems.filter(item => item.selected);
+    for (const item of selectedItems) {
+      const payment = item._originalPurchase?.payment || item.payment;
+      if (payment) {
+        totalAdvance += Number(payment.advance) || 0;
+        totalAdvance += Number(payment.advance_cash) || 0;
+        totalAdvance += Number(payment.advance_card_upi) || 0;
+        totalAdvance += Number(payment.advance_other) || 0;
+      }
+      // Also check if advance is directly on the item (for legacy/manual entries)
+      if (!isNaN(Number(item.advance)) && Number(item.advance) > 0) {
+        totalAdvance += Number(item.advance);
+      }
+    }
+    if (!advanceManuallySet) {
+      setAdvance(totalAdvance ? totalAdvance.toString() : '0.00');
+    }
+  }, [billingItems, advanceManuallySet]);
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col h-screen w-full max-w-screen-xl mx-auto">
@@ -1325,122 +1496,124 @@ const BillingPage: React.FC = () => {
           </div>
           
           {/* Payment Section */}
-          <div className="mb-4 px-3 pt-2 border-b border-gray-300 pb-2">
-            <div className="font-medium text-gray-700 mb-2">Payment</div>
-            <div className="flex">
-              <div className="w-1/6 pr-1">
-                <label className="block text-xs mb-1">Estimate</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
-                  value={estimate}
-                  readOnly
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="w-1/6 px-1">
-                <label className="block text-xs mb-1">*Sch. Disc.</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
-                  value={schDisc}
-                  onChange={(e) => setSchDisc(e.target.value)}
-                  placeholder="0.00"
-                />
-                <span className="text-xs text-gray-500">(Rs.)</span>
-              </div>
-              <div className="w-1/6 px-1">
-                <label className="block text-xs mb-1">Payment</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
-                  value={payment}
-                  onChange={(e) => handlePaymentChange('payment', e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="w-1/6 px-1">
-                <label className="block text-xs mb-1">Tax Rs.</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 rounded-none text-right bg-[#e8e7fa]" 
-                  value={tax}
-                  readOnly
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="w-1/6 px-1">
-                <label className="block text-xs mb-1">Adv.</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
-                  value={advance}
-                  onChange={(e) => handlePaymentChange('advance', e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="w-1/6 pl-1">
-                <label className="block text-xs mb-1">Balance</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
-                  value={balance}
-                  readOnly
-                  placeholder="0.00"
-                />
-              </div>
-            </div>
-            
-            <div className="flex mt-2">
-              <div className="w-1/3 pr-2">
-                <label className="block text-xs mb-1">Cash</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
-                  value={cash}
-                  onChange={(e) => handlePaymentChange('cash', e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <div className="w-1/3 px-2">
-                <label className="block text-xs mb-1">CC/UPI Adv.</label>
-                <div className="flex">
-                  <select 
-                    className="w-1/2 px-2 py-1 border border-gray-300 rounded-none"
-                    value={ccUpiType}
-                    onChange={(e) => setCcUpiType(e.target.value)}
-                  >
-                    <option value="">Type</option>
-                    <option value="VISA">VISA</option>
-                    <option value="MasterCard">MasterCard</option>
-                    <option value="UPI">UPI</option>
-                    <option value="Other">Other</option>
-                  </select>
+          {billingItems.length > 0 && (
+            <div className="mb-4 px-3 pt-2 border-b border-gray-300 pb-2">
+              <div className="font-medium text-gray-700 mb-2">Payment</div>
+              <div className="flex">
+                <div className="w-1/6 pr-1">
+                  <label className="block text-xs mb-1">Estimate</label>
                   <input 
                     type="text" 
-                    className="w-1/2 px-2 py-1 border border-gray-300 rounded-none text-right" 
-                    value={ccUpiAdv}
-                    onChange={(e) => handlePaymentChange('ccUpiAdv', e.target.value)}
+                    className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
+                    value={estimate}
+                    readOnly
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="w-1/6 px-1">
+                  <label className="block text-xs mb-1">*Sch. Disc.</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
+                    value={schDisc}
+                    onChange={(e) => setSchDisc(e.target.value)}
+                    placeholder="0.00"
+                  />
+                  <span className="text-xs text-gray-500">(Rs.)</span>
+                </div>
+                <div className="w-1/6 px-1">
+                  <label className="block text-xs mb-1">Payment</label>
+                  <input
+                    type="text"
+                    className="w-full px-2 py-1 border border-gray-300 rounded-none text-right"
+                    value={payment}
+                    onChange={e => setPayment(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="w-1/6 px-1">
+                  <label className="block text-xs mb-1">Tax Rs.</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 rounded-none text-right bg-[#e8e7fa]" 
+                    value={tax}
+                    readOnly
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="w-1/6 px-1">
+                  <label className="block text-xs mb-1">Adv.</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
+                    value={advance}
+                    onChange={e => { setAdvance(e.target.value); setAdvanceManuallySet(true); }}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="w-1/6 pl-1">
+                  <label className="block text-xs mb-1">Balance</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 bg-[#e8e7fa] rounded-none text-right" 
+                    value={balance}
+                    readOnly
                     placeholder="0.00"
                   />
                 </div>
               </div>
-              <div className="w-1/3 pl-2">
-                <label className="block text-xs mb-1">Cheque</label>
-                <input 
-                  type="text" 
-                  className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
-                  value={cheque}
-                  onChange={(e) => handlePaymentChange('cheque', e.target.value)}
-                  placeholder="0.00"
-                />
+              
+              <div className="flex mt-2">
+                <div className="w-1/3 pr-2">
+                  <label className="block text-xs mb-1">Cash</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
+                    value={cash}
+                    onChange={(e) => handlePaymentChange('cash', e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="w-1/3 px-2">
+                  <label className="block text-xs mb-1">CC/UPI Adv.</label>
+                  <div className="flex">
+                    <select 
+                      className="w-1/2 px-2 py-1 border border-gray-300 rounded-none"
+                      value={ccUpiType}
+                      onChange={(e) => setCcUpiType(e.target.value)}
+                    >
+                      <option value="">Type</option>
+                      <option value="VISA">VISA</option>
+                      <option value="MasterCard">MasterCard</option>
+                      <option value="UPI">UPI</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    <input 
+                      type="text" 
+                      className="w-1/2 px-2 py-1 border border-gray-300 rounded-none text-right" 
+                      value={ccUpiAdv}
+                      onChange={(e) => handlePaymentChange('ccUpiAdv', e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+                <div className="w-1/3 pl-2">
+                  <label className="block text-xs mb-1">Cheque</label>
+                  <input 
+                    type="text" 
+                    className="w-full px-2 py-1 border border-gray-300 rounded-none text-right" 
+                    value={cheque}
+                    onChange={(e) => handlePaymentChange('cheque', e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              
+              <div className="text-right mt-1">
+                <span className="text-blue-700 font-semibold text-sm">*SCHEME DISCOUNT (IF ANY)</span>
               </div>
             </div>
-            
-            <div className="text-right mt-1">
-              <span className="text-blue-700 font-semibold text-sm">*SCHEME DISCOUNT (IF ANY)</span>
-            </div>
-          </div>
+          )}
           
           {/* Bottom Buttons */}
           <div className="flex justify-between px-3 pb-3">

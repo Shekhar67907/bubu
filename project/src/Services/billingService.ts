@@ -74,6 +74,22 @@ interface Prescription {
   pd_os?: string | number; // OS = Oculus Sinister (left eye)
 }
 
+// Define OrderPayment type above Order interface
+interface OrderPayment {
+  id?: string;
+  order_id?: string;
+  payment_estimate?: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  final_amount?: number;
+  advance_cash?: number;
+  advance_card_upi?: number;
+  advance_other?: number;
+  schedule_amount?: number;
+  [key: string]: any;
+}
+
+// Update the main Order interface to include order_payments
 interface Order {
   id: string;
   order_no: string;
@@ -87,6 +103,7 @@ interface Order {
   prescription_id: string;
   prescriptions?: Prescription[];
   order_items?: OrderItem[];
+  order_payments?: OrderPayment[] | OrderPayment;
 }
 
 interface OrderItem {
@@ -141,12 +158,12 @@ interface ContactLensItem {
   created_at?: string;
   updated_at?: string;
   item_index?: number;
-  discount_percent: number | string;
-  discount_amount: number | string;
-  final_amount: number | string;
+  discount_percent?: any;
+  discount_amount?: any;
+  final_amount?: any;
   item_name?: string;
   item_code?: string;
-  tax_percent?: number | string;
+  tax_percent?: any;
   [key: string]: any; // Allow additional properties
 }
 
@@ -379,7 +396,8 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
         ),
         order_items (
           id, item_name, qty, rate, amount, tax_percent, discount_percent, discount_amount
-        )
+        ),
+        order_payments (*)
       `)
       .or(`order_no.ilike.%${searchTerm}%,bill_no.ilike.%${searchTerm}%`)
       .order('order_date', { ascending: false })
@@ -394,7 +412,8 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
           id, order_no, order_date, status, prescription_id, bill_no,
           order_items (
             id, item_name, qty, rate, amount, tax_percent, discount_percent, discount_amount
-          )
+          ),
+          order_payments (*)
         )
       `)
       .or(`name.ilike.%${searchTerm}%,mobile_no.ilike.%${searchTerm}%,phone_landline.ilike.%${searchTerm}%`)
@@ -443,24 +462,47 @@ const searchOrders = async (searchTerm: string): Promise<UnifiedSearchResult[]> 
 
     // Ensure we have the correct type
     const results = uniqueData as unknown as Order[];
-    return results.map(order => ({
-      id: order.id,
-      sourceType: 'order' as const,
-      name: order.prescriptions?.[0]?.name || 'Unknown Customer',
-      referenceNo: order.order_no || order.bill_no || 'N/A',
-      mobile: order.prescriptions?.[0]?.mobile_no || order.prescriptions?.[0]?.phone_landline || '',
-      email: order.prescriptions?.[0]?.email,
-      address: order.prescriptions?.[0]?.address,
-      city: order.prescriptions?.[0]?.city,
-      state: order.prescriptions?.[0]?.state,
-      pinCode: order.prescriptions?.[0]?.pin_code,
-      date: order.order_date || new Date().toISOString(),
-      totalAmount: order.order_items?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0,
-      balanceAmount: 0,
-      itemCount: order.order_items?.length || 0,
-      jobType: 'Order',
-      originalData: order
-    }));
+    return results.map(order => {
+      // Extract payment fields from order_payments (may be array or object)
+      let payment: OrderPayment = {};
+      if (order.order_payments) {
+        if (Array.isArray(order.order_payments) && order.order_payments.length > 0) {
+          payment = order.order_payments[0];
+        } else if (typeof order.order_payments === 'object') {
+          payment = order.order_payments as OrderPayment;
+        }
+      }
+      return {
+        id: order.id,
+        sourceType: 'order' as const,
+        name: order.prescriptions?.[0]?.name || 'Unknown Customer',
+        referenceNo: order.order_no || order.bill_no || 'N/A',
+        mobile: order.prescriptions?.[0]?.mobile_no || order.prescriptions?.[0]?.phone_landline || '',
+        email: order.prescriptions?.[0]?.email,
+        address: order.prescriptions?.[0]?.address,
+        city: order.prescriptions?.[0]?.city,
+        state: order.prescriptions?.[0]?.state,
+        pinCode: order.prescriptions?.[0]?.pin_code,
+        date: order.order_date || new Date().toISOString(),
+        totalAmount: order.order_items?.reduce((sum, item) => sum + (item.amount || 0), 0) || 0,
+        balanceAmount: 0,
+        itemCount: order.order_items?.length || 0,
+        jobType: 'Order',
+        // Payment fields for billing UI
+        advance: (payment.advance_cash || 0) + (payment.advance_card_upi || 0) + (payment.advance_other || 0),
+        cash_advance: payment.advance_cash || 0,
+        card_upi_advance: payment.advance_card_upi || 0,
+        cheque_advance: payment.advance_other || 0, // Map advance_other as cheque_advance for compatibility
+        discount_amount: payment.discount_amount || 0,
+        discount_percent: 0, // Not available in order_payments
+        payment_total: payment.final_amount || 0,
+        estimate: payment.payment_estimate || 0,
+        originalData: {
+          ...order,
+          payment: payment // Attach payment for downstream use
+        }
+      };
+    });
   } catch (error) {
     logError('[searchOrders] Unexpected error:', error);
     return [];
@@ -515,9 +557,22 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
     // Create a map of prescription_id to prescription data for quick lookup
     const prescriptionMap = new Map(prescriptions.map(p => [p.id, p]));
 
+    // Fetch all payment records for these contact lens prescriptions in a single query
+    const clPrescriptionIds = contactLensPrescriptions.map((cl: any) => cl.id);
+    const { data: paymentsData, error: paymentsError } = await supabase
+      .from('contact_lens_payments')
+      .select('*')
+      .in('contact_lens_prescription_id', clPrescriptionIds);
+    if (paymentsError) {
+      logError('[searchContactLenses] Error fetching contact lens payments:', paymentsError);
+    }
+    // Map: prescription_id -> payment record
+    const paymentMap = new Map((paymentsData || []).map((p: any) => [p.contact_lens_prescription_id, p]));
+
     // Map the results to the unified format
     return contactLensPrescriptions.map(clPrescription => {
       const prescription = prescriptionMap.get(clPrescription.prescription_id);
+      const payment = paymentMap.get(clPrescription.id) || {};
       
       // Map eye side from database format to UI format and prepare items with all required fields
       // Define a type for the raw contact lens item from the database
@@ -591,11 +646,20 @@ const searchContactLenses = async (searchTerm: string): Promise<UnifiedSearchRes
         itemCount: items.length,
         jobType: 'CL',
         items: items, // Include the detailed items array
+        advance: payment.advance || 0,
+        cash_advance: payment.cash_advance || 0,
+        card_upi_advance: payment.card_upi_advance || 0,
+        cheque_advance: payment.cheque_advance || 0,
+        discount_amount: payment.discount_amount || 0,
+        discount_percent: payment.discount_percent || 0,
+        payment_total: payment.payment_total || 0,
+        estimate: payment.estimate || 0,
         originalData: {
           ...clPrescription,
           prescriptions: [prescription],
           contact_lens_items: items,
-          items: items // Duplicate for backward compatibility
+          items: items, // Duplicate for backward compatibility
+          payment: payment // Attach payment for downstream use
         }
       };
     });
@@ -952,6 +1016,15 @@ interface ContactLensDetails {
   pinCode?: string;
   totalAmount: number;
   balanceAmount: number;
+  advance: number;
+  cash_advance: number;
+  card_upi_advance: number;
+  cheque_advance: number;
+  discount_amount: number;
+  discount_percent: number;
+  payment_total: number;
+  estimate: number;
+  payment: any;
   [key: string]: any; // Allow additional properties
 }
 
@@ -981,6 +1054,18 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
       logError('[getContactLensDetails] Error fetching items:', itemsError);
       throw itemsError;
     }
+
+    // --- Fetch the related payment record ---
+    const { data: paymentData, error: paymentError } = await supabase
+      .from('contact_lens_payments')
+      .select('*')
+      .eq('contact_lens_prescription_id', prescriptionId)
+      .single();
+    if (paymentError) {
+      logError('[getContactLensDetails] Error fetching payment:', paymentError);
+    }
+    const payment = paymentData || {};
+    // ---
 
     // Normalize items for billing table
     const items = (itemsData || []).map((item: any) => ({
@@ -1028,7 +1113,16 @@ const getContactLensDetails = async (prescriptionId: string): Promise<ContactLen
       pinCode: prescriptionData.pin_code,
       pin_code: prescriptionData.pin_code,
       totalAmount: items.reduce((sum, item) => sum + (typeof item.amount === 'number' ? item.amount : 0), 0),
-      balanceAmount: 0
+      balanceAmount: 0,
+      advance: payment.advance || 0,
+      cash_advance: payment.cash_advance || 0,
+      card_upi_advance: payment.card_upi_advance || 0,
+      cheque_advance: payment.cheque_advance || 0,
+      discount_amount: payment.discount_amount || 0,
+      discount_percent: payment.discount_percent || 0,
+      payment_total: payment.payment_total || 0,
+      estimate: payment.estimate || 0,
+      payment: payment
     };
 
     return result;
@@ -1313,7 +1407,7 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
         
         const { data: clByPrescriptionId, error: clPrescError } = await supabase
           .from('contact_lens_prescriptions')
-          .select('*, contact_lens_items(*), prescriptions(*)')
+          .select('*, contact_lens_items(*), prescriptions(*), payment:contact_lens_payments(*)')
           .in('prescription_id', customerPrescriptionIds)
           .order('created_at', { ascending: false });
           
@@ -1615,7 +1709,28 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
               return;
             }
             
-            allItems.push({
+            // --- CRITICAL FIX: Attach parent payment and use its fields ---
+            const parentPayment = cl.payment || cl._originalPurchase?.payment || cl._originalPurchase?._originalPurchase?.payment;
+            const clDiscount = parentPayment ? parentPayment.discount_amount : Number(item.discount_amount) || 0;
+            const clDiscountPercent = parentPayment ? parentPayment.discount_percent : Number(item.discount_percent) || 0;
+            const clAdvance = parentPayment ? parentPayment.advance : 0;
+            const clEstimate = parentPayment ? parentPayment.estimate : Number(item.amount) || 0;
+
+            // --- COMPREHENSIVE DEBUG LOGGING ---
+            logDebug('[BILLING][CL] Mapping contact lens item', {
+              cl_id: cl.id,
+              item_id: item.id,
+              parentPayment,
+              rawItem: item,
+              computed: {
+                clDiscount,
+                clDiscountPercent,
+                clAdvance,
+                clEstimate
+              }
+            });
+
+            const mappedBillingItem = {
               id: `cl_${cl.id || 'unknown'}_${item.id || `item_${Date.now()}_${itemIndex}`}`,
               type: 'contact_lens',
               date: cl.created_at || new Date().toISOString(),
@@ -1628,8 +1743,10 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
               rate: Number(item.rate) || 0,
               amount: Number(item.amount) || 0,
               balance_amount: 0,
-              discount_percent: Number(item.discount_percent) || 0,
-              discount_amount: Number(item.discount_amount) || 0,
+              discount_percent: clDiscountPercent,
+              discount_amount: clDiscount,
+              advance: clAdvance,
+              estimate: clEstimate,
               tax_percent: Number(item.tax_percent) || 0,
               eye_side: eyeSide,
               brand: item.brand,
@@ -1650,8 +1767,13 @@ export const getCustomerPurchaseHistory = async (mobileNo: string) => {
                 prescription: prescription
               },
               _originalItem: item,
-              _prescriptionNo: prescriptionNo
-            });
+              _prescriptionNo: prescriptionNo,
+              _parentPayment: parentPayment || null // Attach for downstream UI use
+            };
+
+            logDebug('[BILLING][CL] Final mapped billing item', mappedBillingItem);
+
+            allItems.push(mappedBillingItem);
           } catch (itemError) {
             logError('Error processing contact lens item:', item, itemError);
           }
