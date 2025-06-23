@@ -2368,8 +2368,18 @@ const OrderCardForm: React.FC = () => {
       
       if (result && result.success) {
         logInfo('Order saved successfully', { orderId: result.orderId, prescriptionNo: formData.prescriptionNo });
+        setNotification({
+          message: isExistingRecord ? 'Order updated successfully!' : 'Order created successfully!',
+          type: 'success',
+          visible: true
+        });
       } else {
         logError('Order save failed', result?.message);
+        setNotification({
+          message: result?.message || 'Order save failed',
+          type: 'error',
+          visible: true
+        });
       }
     } catch (error) {
       logError('Error in saveOrderToDatabase:', error);
